@@ -1,0 +1,75 @@
+[tool.poetry]
+name = "torchcache"
+version = "0.1.0"
+description = "Cache PyTorch module outputs on the fly"
+authors = ["Eren Akbiyik <erenakbiyik@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+torch = "^2.0.1"
+Brotli = "^1.0.9"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^3.3.3"
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+coverage = "^7.3.0"
+flake8 = "^6.1.0"
+black = "^23.7.0"
+isort = "^5.12.0"
+
+[tool.black]
+target-version = ["py310"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.toml
+  | \.venv
+  | \.venv
+  | \.bzr
+  | \.direnv
+  | \.eggs
+  | \.nox
+  | \.svn
+  | __pypackages__
+  | node_modules
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+ensure_newline_before_comments = true
+line_length = 88
+skip = [
+  '.bzr', '.direnv', '.eggs', '.git', '.hg',
+  '.mypy_cache', '.nox', '.svn', '.tox', '.venv',
+  '__pypackages__', '_build', 'buck-out', 'build',
+  'dist', 'node_modules', 'venv'
+]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
+
+[tool.coverage.run]
+omit = [
+    "torchcache/**/__pycache__",
+]
+include = [
+    "torchcache/**",
+]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,49 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Format code",
+            "type": "shell",
+            "command": "poetry run python -m black . && poetry run python -m isort .",
+            "options": {
+				"cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "echo": false,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Run Python Tests with coverage",
+            "type": "shell",
+            "command": "poetry run coverage run -m pytest && poetry run coverage xml",
+            "options": {
+				"cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        },
+        {
+            "label": "Run pre-commit hook",
+            "type": "shell",
+            "command": "poetry run pre-commit run",
+            "options": {
+				"cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            }
+        }
+    ]
+}

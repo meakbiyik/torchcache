@@ -1,0 +1,23 @@
+{
+    "taskExplorer.exclude": [
+        ".venv/**",
+        "package/**",
+        "tests/**",
+        "conftest.py"
+    ],
+    "files.eol": "\n",
+    "python.testing.pytestArgs": [
+        "-v",
+        // "--no-cov", // -> Uncomment to disable coverage, which allows for debugging in VSCode Test Explorer
+        "--cov=torchcache/",
+        "--cov-report=xml",
+        "--pdb",
+        "tests/"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "python.formatting.provider": "black",
+}
