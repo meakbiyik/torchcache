@@ -1,4 +1,4 @@
-"""This module implements the TorchCache decorator and the underlying class."""
+"""This module implements the torchcache decorator and the underlying class."""
 import atexit
 import hashlib
 import inspect
@@ -13,7 +13,7 @@ import torch
 from torch import Tensor
 
 
-def TorchCache(
+def torchcache(
     *cache_args,
     **cache_kwargs,
 ) -> callable:
@@ -25,7 +25,7 @@ def TorchCache(
     Always invoke the decorator with parentheses, even if no arguments are
     passed. For example:
 
-    @TorchCache()
+    @torchcache()
     class CachedModule(nn.Module):
         pass
 
@@ -34,7 +34,7 @@ def TorchCache(
     that starts with "torchcache_". For example, to set the cache directory
     for a module (persistent_cache_dir), you can do:
 
-    @TorchCache(peristent=True)
+    @torchcache(peristent=True)
     class CachedModule(nn.Module):
         def __init__(self, cache_dir: str | Path):
             self.torchcache_persistent_cache_dir = cache_dir
@@ -77,9 +77,9 @@ class _TorchCache:
         max_memory_cache_size: int = int(1e9),
         brotli_quality: int = 9,
     ) -> None:
-        """Initialize the TorchCache.
+        """Initialize the torchcache.
 
-        Do not initialize this class directly, use the TorchCache
+        Do not initialize this class directly, use the torchcache
         decorator instead.
 
         Parameters

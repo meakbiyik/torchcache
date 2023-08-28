@@ -5,7 +5,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from torchcache import TorchCache
+from torchcache import torchcache
 from torchcache.torchcache import _TorchCache
 
 
@@ -20,7 +20,7 @@ class SimpleModule(nn.Module):
 
 # Test basic functionality of the caching mechanism without persistent storage.
 def test_basic_caching():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(SimpleModule):
         pass
 
@@ -49,7 +49,7 @@ def test_basic_caching():
 
 # Test caching mechanism with persistent storage.
 def test_persistent_caching(tmp_path):
-    @TorchCache(persistent=True, persistent_cache_dir=tmp_path)
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path)
     class CachedModule(SimpleModule):
         pass
 
@@ -69,7 +69,7 @@ def test_persistent_caching(tmp_path):
 
     # Now create a new instance of the model and check if the cache is loaded from disk
     # We re-define the class to flush the cache
-    @TorchCache(persistent=True, persistent_cache_dir=tmp_path)
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path)
     class CachedModule(SimpleModule):
         pass
 
@@ -91,7 +91,7 @@ def test_persistent_caching(tmp_path):
 
 # Test temporary cachedir
 def test_persistent_caching_temporary_cachedir():
-    @TorchCache(persistent=True)
+    @torchcache(persistent=True)
     class CachedModule(SimpleModule):
         pass
 
@@ -123,7 +123,7 @@ def test_hashing():
 
 # Test for mixed cache hits
 def test_mixed_cache_hits():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(SimpleModule):
         pass
 
@@ -142,7 +142,7 @@ def test_mixed_cache_hits():
 
 # Test monkey patching
 def test_monkey_patching():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(SimpleModule):
         pass
 
@@ -164,7 +164,7 @@ class DoubleInputModule(nn.Module):
 
 
 def test_multiple_inputs():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(DoubleInputModule):
         pass
 
@@ -184,7 +184,7 @@ def test_multiple_inputs():
 
 # Test different tensor shapes
 def test_different_shapes():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(SimpleModule):
         pass
 
@@ -196,9 +196,9 @@ def test_different_shapes():
     assert torch.equal(output, input_tensor * 2)
 
 
-# Test overriding TorchCache arguments with module attributes that starts with "torchcache_"
+# Test overriding torchcache arguments with module attributes that starts with "torchcache_"
 def test_override_torchcache_args():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(SimpleModule):
         def __init__(self):
             super().__init__()
@@ -216,7 +216,7 @@ def test_override_torchcache_args():
 # Test training with forward and backward to ensure that
 # there are no missing detach calls.
 def test_training():
-    @TorchCache(persistent=False)
+    @torchcache(persistent=False)
     class CachedModule(SimpleModule):
         def __init__(self):
             super().__init__()

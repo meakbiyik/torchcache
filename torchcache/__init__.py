@@ -1,4 +1,4 @@
 """torchcache package."""
-from .torchcache import TorchCache
+from .torchcache import torchcache
 
-__all__ = ["TorchCache"]
+__all__ = ["torchcache"]
