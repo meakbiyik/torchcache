@@ -3,6 +3,7 @@ import atexit
 import hashlib
 import inspect
 import io
+import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -11,6 +12,8 @@ from typing import Type, Union
 import brotli
 import torch
 from torch import Tensor
+
+logger = logging.getLogger(__name__)
 
 
 def torchcache(
@@ -47,18 +50,26 @@ def torchcache(
         class WrappedModule(ModuleClass):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
+                logger.debug("Initializing torchcache")
                 nonlocal cache_instance
                 if cache_instance is None:
+                    logger.debug("Initializing torchcache instance")
                     # Override the cache keyword arguments using the class properties
                     # that starts with torchcache_
                     for key in dir(self):
                         if key.startswith(magic_prefix):
+                            logger.info(
+                                f"Overriding {key[len(magic_prefix) :]} with "
+                                f"{getattr(self, key)}"
+                            )
                             cache_kwargs[key[len(magic_prefix) :]] = getattr(self, key)
+                    logger.debug(f"Torchcache kwargs: {cache_kwargs}")
                     cache_instance = _TorchCache(**cache_kwargs)
                 self.cache_instance = cache_instance
                 self.cache_instance.wrap_module(self, ModuleClass, *args, **kwargs)
                 __name__ = f"{ModuleClass.__name__}Cached"  # noqa: F841
                 __qualname__ = f"{ModuleClass.__qualname__}Cached"  # noqa: F841
+                logger.debug("Initialized torchcache")
 
         return WrappedModule
 
@@ -115,19 +126,22 @@ class _TorchCache:
         self.cache: dict[int, Tensor] = {}
         self.max_memory_cache_size = max_memory_cache_size
         self.memory_cache_size = 0
+        self.is_memory_cache_full = False
 
         if self.persistent:
+            logger.debug("Initializing persistent cache")
             self.cache_dir = (
                 Path(persistent_cache_dir) if persistent_cache_dir is not None else None
             )
+            logger.info(f"Torchcache dir: {self.cache_dir}")
             self.max_persistent_cache_size = max_persistent_cache_size
             self.persistent_cache_size = 0
             self.is_persistent_cache_full = False
             if self.cache_dir is None:
                 self.cache_dir = Path(tempfile.mkdtemp())
-                atexit.register(
-                    lambda: shutil.rmtree(self.cache_dir, ignore_errors=True)
-                )
+                atexit.register(self.cache_cleanup)
+
+        logger.debug(f"Params: {self.__dict__}")
 
         # Runtime-stored variables for the current batch
         self.current_embeddings = None
@@ -137,6 +151,11 @@ class _TorchCache:
 
         # Overridden in wrap_module
         self.module_hash: int = 0
+
+    def cache_cleanup(self):
+        logger.info(f"Cleaning up the persistent cache in {self.cache_dir}")
+        shutil.rmtree(self.cache_dir, ignore_errors=True)
+        logger.info(f"Deleted cache dir: {self.cache_dir}")
 
     def forward_pre_hook(self, module, inputs):
         """Forward pre-hook to check the cache.
@@ -156,6 +175,9 @@ class _TorchCache:
         inputs : Tuple[Tensor]
             Inputs to the module.
         """
+        logger.debug(
+            f"Forward pre-hook input shapes: {[input.shape for input in inputs]}"
+        )
         flattened_inputs = [input.flatten(1) for input in inputs]
         concatenated_inputs = torch.cat(flattened_inputs, dim=1)
 
@@ -167,12 +189,14 @@ class _TorchCache:
         ) = self._fetch_cached_embeddings()
 
         if self.current_indices_to_embed.shape[0] > 0:
+            logger.debug("Forwarding the rest of the inputs")
             inputs_to_embed = [
                 input[self.current_indices_to_embed].view(-1, *input.shape[1:])
                 for input in inputs
             ]
             return tuple(inputs_to_embed)
         else:
+            logger.debug("Skipping forward pass")
             self.current_skip_forward = True
             return None
 
@@ -191,12 +215,13 @@ class _TorchCache:
         outputs : Tensor
             Outputs from the module.
         """
+        logger.debug(f"Forward hook outputs shape: {outputs.shape}")
         # If forward pass was skipped, restore the flag and just return
         if self.current_skip_forward:
+            logger.debug("Forward pass was skipped, restoring the flag")
             self.current_skip_forward = False
             return
 
-        # Cache new embeddings
         self._cache_embeddings(
             outputs, self.current_hashes[self.current_indices_to_embed]
         )
@@ -204,6 +229,7 @@ class _TorchCache:
         if self.current_embeddings is None:
             # This is the first forward pass, so we do not
             # need to combine the embeddings
+            logger.debug("First forward pass, returning the embeddings")
             self.current_embeddings = outputs
         else:
             # Add the newly computed embeddings to the rest
@@ -224,16 +250,20 @@ class _TorchCache:
         pre-hook and the post-hook, as well as overriding the
         forward method.
         """
+        logger.debug("Wrapping the module and registering hooks")
         module.register_forward_pre_hook(self.forward_pre_hook)
         module.register_forward_hook(self.forward_hook)
         # Also create a hash of the module definition, args, and kwargs
         # So that we do not mistakenly use the cache for a different module
+        logger.debug("Creating module hash")
         try:
             module_definition = inspect.getsource(moduleClass)
             hash_string = module_definition + repr(args) + repr(kwargs)
-        except OSError:
+        except OSError as e:
+            logger.warn(f"Could not retrieve the module source: {e}")
             # If the module source cannot be retrieved, we use the module name
             hash_string = module.__class__.__name__ + repr(args) + repr(kwargs)
+        logger.debug(f"Module hash string: {hash_string}")
         # We convert it to an integer so that it is easier to manipulate
         self.module_hash = int.from_bytes(
             hashlib.blake2b(
@@ -242,6 +272,7 @@ class _TorchCache:
             ).digest(),
             "big",
         )
+        logger.info(f"Module hash: {self.module_hash}")
 
         # Wrap the forward method so that we can skip it if needed
         current_original_forward = module.forward
@@ -272,21 +303,37 @@ class _TorchCache:
         indices_to_embed = []
 
         if embeddings is not None:
+            logger.debug("Detaching the embeddings")
             embeddings = embeddings.detach()
 
         for i, hash_val in enumerate(self.current_hashes):
             int_hash_val = hash_val.item()
             embedding = self._load_from_memory(int_hash_val)
             if embedding is None and self.persistent:
+                logger.debug(
+                    f"Hash value: {int_hash_val} not in memory, "
+                    "attempting to load from file"
+                )
                 embedding = self._load_from_file(int_hash_val)
 
             if embedding is None:
+                logger.debug(
+                    f"Cache miss for hash value: {int_hash_val}, embedding index {i}"
+                )
                 indices_to_embed.append(i)
             else:
+                logger.debug(f"Cache hit for hash value: {int_hash_val}")
                 if (
                     embeddings is None
                     or embeddings.shape[0] < self.current_hashes.shape[0]
                 ):
+                    if embeddings is None:
+                        logger.info("Embeddings is None, initializing")
+                    else:
+                        logger.info(
+                            f"Embeddings is too small ({embeddings.shape[0]}), "
+                            f"resizing to {self.current_hashes.shape[0]}"
+                        )
                     embeddings = torch.empty(
                         self.current_hashes.shape[0],
                         *embedding.shape,
@@ -300,6 +347,7 @@ class _TorchCache:
             dtype=torch.long,
             device=self.current_hashes.device,
         )
+        logger.debug(f"Indices to embed: {indices_to_embed}")
 
         return indices_to_embed, embeddings
 
@@ -317,6 +365,10 @@ class _TorchCache:
         embedding_hashes : Tensor
             Hash values of the images.
         """
+        logger.debug(
+            f"Caching the embeddings with shape: {embeddings_to_cache.shape} "
+            f"for hashes: {embedding_hashes}"
+        )
         for i, hash_val in enumerate(embedding_hashes):
             embedding_to_cache = embeddings_to_cache[i]
             int_hash_val = hash_val.item()
@@ -337,10 +389,13 @@ class _TorchCache:
         Tensor
             Hash values of the tensor.
         """
+        logger.debug(f"Hashing the tensor with shape: {tensor.shape}")
         self.coefficients = self.coefficients.to(tensor.device)
 
         subsample_rate = max(1, tensor.shape[1] // self.subsample_count)
+        logger.debug(f"Subsample rate: {subsample_rate}")
         tensor = tensor[:, ::subsample_rate]
+        logger.debug(f"Subsampled tensor shape: {tensor.shape}")
 
         # in mixed precision, the matmul operation returns float16 values,
         # which overflows
@@ -352,32 +407,57 @@ class _TorchCache:
             )
             + self.module_hash
         )
+        logger.debug(f"Hash values: {hash_val}")
 
         return hash_val
 
     def _cache_to_memory(self, embedding: Tensor, hash_val: int) -> None:
         """Cache the embedding in memory."""
+        logger.debug(
+            f"Caching embedding with shape: {embedding.shape} "
+            f"to memory with hash value: {hash_val}"
+        )
+        if self.is_memory_cache_full:
+            logger.info("Memory cache is full, skipping caching to memory")
+            return
+
         embedding_size = embedding.element_size() * embedding.nelement()
         if self.memory_cache_size + embedding_size < self.max_memory_cache_size:
             self.cache[hash_val] = (
                 embedding.detach().clone().to(self.memory_cache_device)
             )
             self.memory_cache_size += embedding_size
+            logger.debug(f"New memory cache size: {self.memory_cache_size}")
+        else:
+            logger.warn("Memory cache is full, skipping caching to memory")
+            self.is_memory_cache_full = True
 
     def _load_from_memory(self, hash_val: int) -> Union[Tensor, None]:
         """Load the cached embedding from memory."""
+        logger.debug(f"Loading from memory with hash value: {hash_val}")
         if hash_val in self.cache:
             return self.cache[hash_val].detach().clone()
         else:
+            logger.debug("Hash value not in memory")
             return None
 
     def _cache_to_file(self, embedding: Tensor, hash_val: int) -> None:
         """Cache the embedding to a file using brotli compression."""
+        logger.debug(
+            f"Caching embedding with shape: {embedding.shape} to file "
+            f"with hash value: {hash_val}"
+        )
         if self.is_persistent_cache_full:
+            logger.info("Persistent cache is full, skipping caching to file")
             return
 
         file_path: Path = self.cache_dir / f"{hash_val}.pt.br"
+        logger.debug(f"File path to cache for hash value {hash_val}: {file_path}")
         if file_path.exists():
+            logger.warn(
+                f"File {file_path} already exists, skipping caching to file. "
+                "This should not happen, please report this as an issue on Github"
+            )
             return
 
         buffer = io.BytesIO()
@@ -386,11 +466,13 @@ class _TorchCache:
             buffer.getvalue(),
             quality=self.brotli_quality,
         )
+        logger.debug(f"Compressed data size: {len(compressed_data)}")
 
         if (
             self.persistent_cache_size + len(compressed_data)
             > self.max_persistent_cache_size
         ):
+            logger.warn("Persistent cache is full, skipping caching to file")
             self.is_persistent_cache_full = True
             return
 
@@ -398,12 +480,15 @@ class _TorchCache:
             f.write(compressed_data)
 
         self.persistent_cache_size += len(compressed_data)
+        logger.debug(f"New persistent cache size: {self.persistent_cache_size}")
 
     def _load_from_file(self, hash_val: int) -> Union[Tensor, None]:
         """Load the cached embedding from a file using brotli decompression."""
         file_path = self.cache_dir / f"{hash_val}.pt.br"
+        logger.debug(f"Loading from file {file_path} with hash value: {hash_val}")
 
         if not file_path.exists():
+            logger.debug("File does not exist")
             return None
 
         with open(file_path, "rb") as f:
@@ -412,6 +497,7 @@ class _TorchCache:
         buffer = io.BytesIO(brotli.decompress(compressed_data))
         embedding = torch.load(buffer, map_location=self.current_hashes.device)
 
+        logger.debug("Caching to memory before returning")
         self._cache_to_memory(embedding, hash_val)
 
         return embedding
