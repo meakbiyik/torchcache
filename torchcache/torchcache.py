@@ -2,7 +2,7 @@
 import atexit
 import hashlib
 import inspect
-import pickle
+import io
 import shutil
 import tempfile
 from pathlib import Path
@@ -380,7 +380,13 @@ class _TorchCache:
         if file_path.exists():
             return
 
-        compressed_data = brotli.compress(pickle.dumps(embedding), quality=9)
+        buffer = io.BytesIO()
+        torch.save(embedding, buffer)
+        compressed_data = brotli.compress(
+            buffer.getvalue(),
+            quality=self.brotli_quality,
+        )
+
         if (
             self.persistent_cache_size + len(compressed_data)
             > self.max_persistent_cache_size
@@ -403,9 +409,8 @@ class _TorchCache:
         with open(file_path, "rb") as f:
             compressed_data = f.read()
 
-        embedding = pickle.loads(brotli.decompress(compressed_data)).to(
-            self.current_hashes.device
-        )
+        buffer = io.BytesIO(brotli.decompress(compressed_data))
+        embedding = torch.load(buffer, map_location=self.current_hashes.device)
 
         self._cache_to_memory(embedding, hash_val)
 
