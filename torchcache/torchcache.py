@@ -209,7 +209,7 @@ class _TorchCache:
             # Add the newly computed embeddings to the rest
             self.current_embeddings[self.current_indices_to_embed] = outputs
 
-        return self.current_embeddings
+        return self.current_embeddings[: self.current_hashes.shape[0]]
 
     def wrap_module(
         self,
