@@ -5,7 +5,8 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(".."))  # Source code dir relative to this file
+# Source code dir relative to this file
+sys.path.insert(0, os.path.abspath(".." + os.sep + ".."))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -26,7 +27,11 @@ extensions = [
     "sphinx.ext.autosummary",
     "numpydoc",
 ]
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
+if os.environ.get("READTHEDOCS") == "True":
+    autosummary_generate = False  # Turn it off on readthedocs, otherwise it will fail
+else:
+    autosummary_generate = True
+add_module_names = False
 numpydoc_show_class_members = False
 
 templates_path = ["_templates"]

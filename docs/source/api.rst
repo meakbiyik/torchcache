@@ -3,7 +3,6 @@ API documentation
 
 .. autosummary::
    :toctree: _autosummary
-   :recursive:
 
    torchcache.torchcache
    torchcache.torchcache._TorchCache

@@ -11,7 +11,7 @@ Automatic cache management
 1. The decorated module (including its source code obtained through `inspect.getsource`) and its args/kwargs.
 2. The inputs provided to the module's forward method.
 
-This hash serves as the cache key for the forward method's output per item in a batch. When our MRU (most-recently-used) cache fills up for the given session, the system continues running the forward method and dismisses the oldest output. This MRU strategy streamlines cache invalidation, aligning with the iterative nature of neural network training, without requiring any additional record-keeping.
+This hash serves as the cache key for the forward method's output per item in a batch. When our MRU (most-recently-used) cache fills up for the given session, the system continues running the forward method and dismisses the newest output. This MRU strategy streamlines cache invalidation, aligning with the iterative nature of neural network training, without requiring any additional record-keeping.
 
 .. warning::
 

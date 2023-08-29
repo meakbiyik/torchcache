@@ -41,7 +41,7 @@ def torchcache(
 
     .. code-block:: python
 
-        @torchcache(peristent=True)
+        @torchcache(persistent=True)
         class CachedModule(nn.Module):
             def __init__(self, cache_dir: str | Path):
                 self.torchcache_persistent_cache_dir = cache_dir
