@@ -220,19 +220,28 @@ def test_training():
     class CachedModule(SimpleModule):
         def __init__(self):
             super().__init__()
-            self.weight = nn.Parameter(torch.randn(5, 5))
+            self.weight = torch.randn(5, 5)
 
         def forward(self, x):
             return x @ self.weight
 
-    model = CachedModule()
+    class TrainedModule(SimpleModule):
+        def __init__(self):
+            super().__init__()
+            self.cached_module = CachedModule()
+            self.weight = nn.Parameter(torch.randn(5, 5))
+
+        def forward(self, x):
+            return self.cached_module(x) @ self.weight
+
+    model = TrainedModule()
     input_tensor = torch.randn((1, 5))
 
     output = model(input_tensor)
     loss = output.sum()
     loss.backward()
 
-    assert torch.equal(output, input_tensor @ model.weight)
+    assert torch.equal(output, input_tensor @ model.cached_module.weight @ model.weight)
     assert model.weight.grad is not None
 
     # run again to ensure that the graph is sane
@@ -240,6 +249,40 @@ def test_training():
     output = model(input_tensor)
     loss = output.sum()
     loss.backward()
+
+
+# Ensure that wrapping fails if there is a parameter that requires grad
+def test_fails_with_parameter():
+    @torchcache(persistent=False)
+    class CachedModule(SimpleModule):
+        def __init__(self):
+            super().__init__()
+            self.weight = nn.Parameter(torch.randn(5, 5))
+
+        def forward(self, x):
+            return x @ self.weight
+
+    with pytest.raises(AssertionError):
+        model = CachedModule()
+
+
+# Check using different dtype for caching
+def test_different_dtype():
+    @torchcache(persistent=True, cache_dtype=torch.half)
+    class CachedModule(SimpleModule):
+        pass
+
+    model = CachedModule()
+    input_tensor = torch.tensor([[1, 2, 3]], dtype=torch.float32)
+
+    output = model(input_tensor)
+
+    assert torch.equal(output, input_tensor * 2)
+
+    # Second pass, should retrieve from cache but result should be the same
+    output = model(input_tensor)
+
+    assert torch.equal(output, input_tensor * 2)
 
 
 @pytest.fixture(autouse=True)

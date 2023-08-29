@@ -87,6 +87,7 @@ class _TorchCache:
         max_persistent_cache_size: int = int(10e9),
         max_memory_cache_size: int = int(1e9),
         brotli_quality: int = 9,
+        cache_dtype: torch.dtype = None,
     ) -> None:
         """Initialize the torchcache.
 
@@ -111,6 +112,9 @@ class _TorchCache:
         brotli_quality : int, optional
             Quality of the brotli compression for persistent caching, by default 9.
             Must be between 0 and 11.
+        cache_dtype : torch.dtype, optional
+            Data type to use for the cache, by default None. If None, then the
+            data type of the first tensor that is processed is used.
         """
         # Rolling powers of the hash base, up until 2**15 to fit in float16
         roll_powers = torch.arange(0, subsample_count * 2) % 15
@@ -127,6 +131,7 @@ class _TorchCache:
         self.max_memory_cache_size = max_memory_cache_size
         self.memory_cache_size = 0
         self.is_memory_cache_full = False
+        self.cache_dtype = cache_dtype
 
         if self.persistent:
             logger.debug("Initializing persistent cache")
@@ -144,6 +149,7 @@ class _TorchCache:
         logger.debug(f"Params: {self.__dict__}")
 
         # Runtime-stored variables for the current batch
+        self.current_dtype = None
         self.current_embeddings = None
         self.current_hashes = None
         self.current_indices_to_embed = None
@@ -180,6 +186,8 @@ class _TorchCache:
         )
         flattened_inputs = [input.flatten(1) for input in inputs]
         concatenated_inputs = torch.cat(flattened_inputs, dim=1)
+        self.current_dtype = concatenated_inputs.dtype
+        self.cache_dtype = self.cache_dtype if self.cache_dtype else self.current_dtype
 
         self.current_hashes = self.hash_tensor(concatenated_inputs)
 
@@ -223,7 +231,8 @@ class _TorchCache:
             return
 
         self._cache_embeddings(
-            outputs, self.current_hashes[self.current_indices_to_embed]
+            outputs.to(self.cache_dtype),
+            self.current_hashes[self.current_indices_to_embed],
         )
 
         if self.current_embeddings is None:
@@ -235,7 +244,9 @@ class _TorchCache:
             # Add the newly computed embeddings to the rest
             self.current_embeddings[self.current_indices_to_embed] = outputs
 
-        return self.current_embeddings[: self.current_hashes.shape[0]]
+        return self.current_embeddings[: self.current_hashes.shape[0]].to(
+            self.current_dtype
+        )
 
     def wrap_module(
         self,
@@ -286,7 +297,9 @@ class _TorchCache:
 
         def forward_wrapper(*args, **kwargs):
             if self.current_skip_forward:
-                return self.current_embeddings[: self.current_hashes.shape[0]]
+                return self.current_embeddings[: self.current_hashes.shape[0]].to(
+                    self.current_dtype
+                )
             else:
                 return current_original_forward(*args, **kwargs)
 
@@ -344,7 +357,7 @@ class _TorchCache:
                     embeddings = torch.empty(
                         self.current_hashes.shape[0],
                         *embedding.shape,
-                        dtype=embedding.dtype,
+                        dtype=self.cache_dtype,
                         device=self.current_hashes.device,
                     )
                 embeddings[i] = embedding.to(embeddings)
