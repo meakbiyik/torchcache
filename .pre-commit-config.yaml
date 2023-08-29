@@ -1,11 +1,19 @@
 default_language_version:
     python: python3.10
 repos:
+-   repo: local
+    hooks:
+    -   id: generate-sphinx-docs
+        name: Generate Sphinx docs
+        entry: poetry run sphinx-build -b html docs/source docs/build
+        language: system
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
     -   id: trailing-whitespace
+        exclude: ^docs/source/_autosummary/.*
     -   id: end-of-file-fixer
+        exclude: ^docs/source/_autosummary/.*
     -   id: check-yaml
     -   id: check-toml
     -   id: check-added-large-files
@@ -14,6 +22,7 @@ repos:
     -   id: check-merge-conflict
     -   id: mixed-line-ending
         args: ['--fix=lf']
+        exclude: ^docs/source/_autosummary/.*
 -   repo: https://github.com/psf/black
     rev: 23.1.0
     hooks:

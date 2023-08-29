@@ -1,10 +1,10 @@
 # torchcache
 
-[![Lint and Test](https://github.com/meakbiyik/torchcache/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/meakbiyik/torchcache/actions/workflows/ci.yaml) [![codecov](https://codecov.io/gh/meakbiyik/torchcache/graph/badge.svg?token=Oh6mNp0pc8)](https://codecov.io/gh/meakbiyik/torchcache)
+[![Lint and Test](https://github.com/meakbiyik/torchcache/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/meakbiyik/torchcache/actions/workflows/ci.yaml) [![Codecov](https://codecov.io/gh/meakbiyik/torchcache/graph/badge.svg?token=Oh6mNp0pc8)](https://codecov.io/gh/meakbiyik/torchcache) [![Documentation Status](https://readthedocs.org/projects/torchcache/badge/?version=latest)](https://torchcache.readthedocs.io/en/latest/?badge=latest)
 
 Effortlessly cache PyTorch module outputs on-the-fly with `torchcache`.
 
-The documentation will be available soon at [torchcache.readthedocs.io](https://torchcache.readthedocs.io/en/latest/).
+The documentation is available [torchcache.readthedocs.io](https://torchcache.readthedocs.io/en/latest/).
 
 - [Features](#features)
 - [Installation](#installation)
@@ -103,7 +103,7 @@ torchcache automatically manages the cache by hashing both:
 1. The decorated module (including its source code obtained through `inspect.getsource`) and its args/kwargs.
 2. The inputs provided to the module's forward method.
 
-This hash serves as the cache key for the forward method's output per item in a batch. When our MRU (most-recently-used) cache fills up for the given session, the system continues running the forward method and dismisses the oldest output. This MRU strategy streamlines cache invalidation, aligning with the iterative nature of neural network training, without requiring any auxiliary record-keeping.
+This hash serves as the cache key for the forward method's output per item in a batch. When our MRU (most-recently-used) cache fills up for the given session, the system continues running the forward method and dismisses the newest output. This MRU strategy streamlines cache invalidation, aligning with the iterative nature of neural network training, without requiring any auxiliary record-keeping.
 
 > :warning: **Warning**: To avoid having to calculate the directory size on every forward pass, `torchcache` measures and limits the size of the persistent data created only for the given session. To prevent the persistent cache from growing indefinitely, you should periodically clear the cache directory. Note that if you let `torchcache` create a temporary directory, it will be automatically deleted when the session ends.
 
