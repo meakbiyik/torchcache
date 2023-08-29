@@ -20,7 +20,7 @@ def torchcache(
     *cache_args,
     **cache_kwargs,
 ) -> callable:
-    """Decorate a nn.Module class to cache the output of the forward pass.
+    r"""Decorate a nn.Module class to cache the output of the forward pass.
 
     Call this decorator on a nn.Module class to cache the output of the forward
     pass, given the same input and the same module definition.
@@ -28,19 +28,23 @@ def torchcache(
     Always invoke the decorator with parentheses, even if no arguments are
     passed. For example:
 
-    @torchcache()
-    class CachedModule(nn.Module):
-        pass
+    .. code-block:: python
+
+        @torchcache()
+        class CachedModule(nn.Module):
+            pass
 
     Refer to the documentation of _TorchCache for more information. You can
     also override the arguments of _TorchCache by setting class attributes
-    that starts with "torchcache_". For example, to set the cache directory
+    that starts with "torchcache\_". For example, to set the cache directory
     for a module (persistent_cache_dir), you can do:
 
-    @torchcache(peristent=True)
-    class CachedModule(nn.Module):
-        def __init__(self, cache_dir: str | Path):
-            self.torchcache_persistent_cache_dir = cache_dir
+    .. code-block:: python
+
+        @torchcache(peristent=True)
+        class CachedModule(nn.Module):
+            def __init__(self, cache_dir: str | Path):
+                self.torchcache_persistent_cache_dir = cache_dir
     """
     # Multiple initialization of the same class shares the same cache
     cache_instance = None
@@ -77,6 +81,11 @@ def torchcache(
 
 
 class _TorchCache:
+    """Class that implements the caching logic.
+
+    Do not initialize this class directly, use the torchcache decorator instead.
+    """
+
     def __init__(
         self,
         *,
@@ -90,9 +99,6 @@ class _TorchCache:
         cache_dtype: torch.dtype = None,
     ) -> None:
         """Initialize the torchcache.
-
-        Do not initialize this class directly, use the torchcache
-        decorator instead.
 
         Parameters
         ----------
