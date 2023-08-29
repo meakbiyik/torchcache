@@ -250,6 +250,13 @@ class _TorchCache:
         pre-hook and the post-hook, as well as overriding the
         forward method.
         """
+        # Ensure that there are no parameters that require gradients in the module
+        for param in module.parameters():
+            assert not param.requires_grad, (
+                "TorchCache does not support modules with parameters that require "
+                "gradients."
+            )
+
         logger.debug("Wrapping the module and registering hooks")
         module.register_forward_pre_hook(self.forward_pre_hook)
         module.register_forward_hook(self.forward_hook)
