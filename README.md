@@ -4,8 +4,6 @@
 
 Effortlessly cache PyTorch module outputs on-the-fly with `torchcache`.
 
-The documentation is available [torchcache.readthedocs.io](https://torchcache.readthedocs.io/en/latest/).
-
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
