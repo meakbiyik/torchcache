@@ -99,6 +99,7 @@ class _TorchCache:
         zstd_compression_level: int = 3,
         zstd_compression_threads: int = 1,
         cache_dtype: torch.dtype = None,
+        use_mmap_on_load: bool = False,
     ) -> None:
         """Initialize the torchcache.
 
@@ -130,6 +131,13 @@ class _TorchCache:
         cache_dtype : torch.dtype, optional
             Data type to use for the cache, by default None. If None, then the
             data type of the first tensor that is processed is used.
+        use_mmap_on_load : bool, optional
+            Whether to use mmap when loading the cached embeddings from file, by
+            default False. If None, then it is automatically determined based on
+            the torch version. This is only used if persistent is True. This option
+            might be useful if you are using a version >= 2.0.1, as it should
+            improve the performance for large files, but it cannot be used together
+            with compression.
         """
         # Rolling powers of the hash base, up until 2**15 to fit in float16
         roll_powers = torch.arange(0, subsample_count * 2) % 15
@@ -149,6 +157,21 @@ class _TorchCache:
         self.memory_cache_size = 0
         self.is_memory_cache_full = False
         self.cache_dtype = cache_dtype
+
+        if self.zstd_compression and self.use_mmap_on_load:
+            raise ValueError(
+                "Cannot use zstd compression and mmap on load at the same time"
+            )
+
+        # We allow explicit overloading of mmap option despite version
+        # check so that people can use it with nightly versions
+        torch_version = torch.__version__.split(".")
+        self.use_mmap_on_load = (
+            int(torch_version[0]) == 2
+            and (torch_version[1] > 0 or torch_version[2] >= 1)
+            if use_mmap_on_load is None
+            else use_mmap_on_load
+        )
 
         if self.persistent:
             logger.debug("Initializing persistent cache")
@@ -552,6 +575,8 @@ class _TorchCache:
             embedding = torch.load(buffer, **load_kwargs)
 
         else:
+            if self.use_mmap_on_load:
+                load_kwargs["mmap"] = True
             embedding = torch.load(str(file_path), **load_kwargs)
 
         logger.debug("Caching to memory before returning")
