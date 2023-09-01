@@ -211,7 +211,7 @@ class _TorchCache:
         # Overridden in wrap_module if None
         self.module_hash: str = persistent_module_hash
         if persistent_module_hash is not None:
-            logger.warn(
+            logger.warning(
                 f"Overriding module hash: {self.module_hash}. "
                 "This might cause you quite a bit of headache if you are not "
                 "careful, since any changes to the module definition, args, "
@@ -506,7 +506,7 @@ class _TorchCache:
             self.memory_cache_size += embedding_size
             logger.debug(f"New memory cache size: {self.memory_cache_size}")
         else:
-            logger.warn("Memory cache is full, skipping caching to memory")
+            logger.warning("Memory cache is full, skipping caching to memory")
             self.is_memory_cache_full = True
 
     def _load_from_memory(self, hash_val: int) -> Union[Tensor, None]:
@@ -531,7 +531,7 @@ class _TorchCache:
         file_path: Path = self.cache_dir / f"{hash_val}.pt.br"
         logger.debug(f"File path to cache for hash value {hash_val}: {file_path}")
         if file_path.exists():
-            logger.warn(
+            logger.warning(
                 f"File {file_path} already exists, skipping caching to file. "
                 "This should not happen, please report this as an issue on Github"
             )
@@ -551,7 +551,7 @@ class _TorchCache:
             logger.debug(f"Compressed data size: {len(raw_data)}")
 
         if self.persistent_cache_size + len(raw_data) > self.max_persistent_cache_size:
-            logger.warn("Persistent cache is full, skipping caching to file")
+            logger.warning("Persistent cache is full, skipping caching to file")
             self.is_persistent_cache_full = True
             return
 
