@@ -50,7 +50,7 @@ Even when you enable persistent caching, `torchcache` will still store some data
 Optimizing cache size
 ---------------------
 
-If you want to optimize the cache size, you can play with compression quality and the dtype of cached tensor. By default, tensors are cached with the same dtype as the original tensor, and with a compression quality of 9 (out of 11 in brotli). You can change these values with the ``cache_dtype`` and ``brotli_quality`` arguments. Note that the compression quality is only used for persistent caching, and comes with implications on both the speed of caching and loading. For most cases, the default values should be fine.
+If you want to optimize the cache size, you can play with compression quality and the dtype of cached tensor. By default, tensors are cached with the same dtype as the original tensor without compression. You can use ztsd compression, and change the ``cache_dtype``. Note that the compression quality is only used for persistent caching, and comes with implications on both the speed of caching and loading. For most cases, the default values should be fine.
 
 .. code-block:: python
 
@@ -59,7 +59,7 @@ If you want to optimize the cache size, you can play with compression quality an
     @torchcache(
         persistent=True,
         cache_dtype=torch.half,
-        brotli_quality=11,
+        zstd_compression=True,
     )
     class MyModule(nn.Module):
         ...
@@ -79,7 +79,7 @@ You can also set the parameters directly inside the decorated module, in case th
             super().__init__()
             self.linear = nn.Linear(10, 10)
             self.torchcache_cache_dtype = torch.half
-            self.torchcache_brotli_quality = 11
+            self.torchcache_zstd_compression = True
 
         def forward(self, x):
             # This output will be cached

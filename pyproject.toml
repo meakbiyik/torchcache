@@ -9,7 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.8.1"
 torch = "*"
-Brotli = "^1.0.9"
+zstd = "^1.5.5.1"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.3.3"

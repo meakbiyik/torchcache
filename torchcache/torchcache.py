@@ -9,8 +9,8 @@ import tempfile
 from pathlib import Path
 from typing import Type, Union
 
-import brotli
 import torch
+import zstd
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,9 @@ class _TorchCache:
         persistent_cache_dir: str = None,
         max_persistent_cache_size: int = int(10e9),
         max_memory_cache_size: int = int(1e9),
-        brotli_quality: int = 9,
+        zstd_compression: bool = False,
+        zstd_compression_level: int = 3,
+        zstd_compression_threads: int = 1,
         cache_dtype: torch.dtype = None,
     ) -> None:
         """Initialize the torchcache.
@@ -115,9 +117,16 @@ class _TorchCache:
             Maximum size of the persistent cache in bytes, by default 10e9 (10 GB)
         max_memory_cache_size : int, optional
             Maximum size of the memory cache in bytes, by default 1e9 (1 GB)
-        brotli_quality : int, optional
-            Quality of the brotli compression for persistent caching, by default 9.
-            Must be between 0 and 11.
+        zstd_compression : bool, optional
+            Whether to use zstd compression, by default False. See
+            https://github.com/sergey-dryabzhinsky/python-zstd for more information
+            on the arguments below.
+        zstd_compression_level : int, optional
+            Compression level to use, by default 3. Must be between -100 and 22,
+            where -100 is the fastest compression and 22 is the slowest.
+        zstd_compression_threads : int, optional
+            Number of threads to use for compression, by default 1. If 0, then the
+            number of threads is automatically determined.
         cache_dtype : torch.dtype, optional
             Data type to use for the cache, by default None. If None, then the
             data type of the first tensor that is processed is used.
@@ -130,7 +139,9 @@ class _TorchCache:
         )
         self.coefficients.requires_grad_(False)
 
-        self.brotli_quality = brotli_quality
+        self.zstd_compression = zstd_compression
+        self.zstd_compression_level = zstd_compression_level
+        self.zstd_compression_threads = zstd_compression_threads
         self.persistent = persistent
         self.memory_cache_device = memory_cache_device
         self.cache: dict[int, Tensor] = {}
@@ -245,14 +256,15 @@ class _TorchCache:
             # This is the first forward pass, so we do not
             # need to combine the embeddings
             logger.debug("First forward pass, returning the embeddings")
-            self.current_embeddings = outputs
+            return outputs
         else:
             # Add the newly computed embeddings to the rest
-            self.current_embeddings[self.current_indices_to_embed] = outputs
+            embedding_to_return = self.current_embeddings[
+                : self.current_hashes.shape[0]
+            ].to(self.current_dtype)
+            embedding_to_return[self.current_indices_to_embed] = outputs
 
-        return self.current_embeddings[: self.current_hashes.shape[0]].to(
-            self.current_dtype
-        )
+            return embedding_to_return
 
     def wrap_module(
         self,
@@ -284,7 +296,7 @@ class _TorchCache:
             module_definition = inspect.getsource(moduleClass)
             hash_string = module_definition + repr(args) + repr(kwargs)
         except OSError as e:
-            logger.warn(f"Could not retrieve the module source: {e}")
+            logger.error(f"Could not retrieve the module source: {e}")
             # If the module source cannot be retrieved, we use the module name
             hash_string = module.__class__.__name__ + repr(args) + repr(kwargs)
         logger.debug(f"Module hash string: {hash_string}")
@@ -395,8 +407,9 @@ class _TorchCache:
             f"Caching the embeddings with shape: {embeddings_to_cache.shape} "
             f"for hashes: {embedding_hashes}"
         )
+        embedding_hashes = embedding_hashes.detach()
         for i, hash_val in enumerate(embedding_hashes):
-            embedding_to_cache = embeddings_to_cache[i]
+            embedding_to_cache = embeddings_to_cache[i].clone()
             int_hash_val = hash_val.item()
             if self.persistent:
                 self._cache_to_file(embedding_to_cache, int_hash_val)
@@ -433,7 +446,6 @@ class _TorchCache:
             )
             + self.module_hash
         )
-        logger.debug(f"Hash values: {hash_val}")
 
         return hash_val
 
@@ -449,9 +461,7 @@ class _TorchCache:
 
         embedding_size = embedding.element_size() * embedding.nelement()
         if self.memory_cache_size + embedding_size < self.max_memory_cache_size:
-            self.cache[hash_val] = (
-                embedding.detach().clone().to(self.memory_cache_device)
-            )
+            self.cache[hash_val] = embedding.to(self.memory_cache_device)
             self.memory_cache_size += embedding_size
             logger.debug(f"New memory cache size: {self.memory_cache_size}")
         else:
@@ -462,13 +472,13 @@ class _TorchCache:
         """Load the cached embedding from memory."""
         logger.debug(f"Loading from memory with hash value: {hash_val}")
         if hash_val in self.cache:
-            return self.cache[hash_val].detach().clone()
+            return self.cache[hash_val]
         else:
             logger.debug("Hash value not in memory")
             return None
 
     def _cache_to_file(self, embedding: Tensor, hash_val: int) -> None:
-        """Cache the embedding to a file using brotli compression."""
+        """Cache the embedding to a file, optionally using zstd compression."""
         logger.debug(
             f"Caching embedding with shape: {embedding.shape} to file "
             f"with hash value: {hash_val}"
@@ -488,40 +498,61 @@ class _TorchCache:
 
         buffer = io.BytesIO()
         torch.save(embedding, buffer)
-        compressed_data = brotli.compress(
-            buffer.getvalue(),
-            quality=self.brotli_quality,
-        )
-        logger.debug(f"Compressed data size: {len(compressed_data)}")
+        raw_data = buffer.getvalue()
+        logger.debug(f"Raw data size: {len(raw_data)}")
 
-        if (
-            self.persistent_cache_size + len(compressed_data)
-            > self.max_persistent_cache_size
-        ):
+        if self.zstd_compression:
+            raw_data = zstd.compress(
+                raw_data,
+                level=self.zstd_compression_level,
+                threads=self.zstd_compression_threads,
+            )
+            logger.debug(f"Compressed data size: {len(raw_data)}")
+
+        if self.persistent_cache_size + len(raw_data) > self.max_persistent_cache_size:
             logger.warn("Persistent cache is full, skipping caching to file")
             self.is_persistent_cache_full = True
             return
 
         with open(file_path, "wb") as f:
-            f.write(compressed_data)
+            f.write(raw_data)
 
-        self.persistent_cache_size += len(compressed_data)
+        self.persistent_cache_size += len(raw_data)
         logger.debug(f"New persistent cache size: {self.persistent_cache_size}")
 
     def _load_from_file(self, hash_val: int) -> Union[Tensor, None]:
-        """Load the cached embedding from a file using brotli decompression."""
-        file_path = self.cache_dir / f"{hash_val}.pt.br"
+        """Load the cached embedding from a file, maybe after decompression."""
+        file_path: Path = self.cache_dir / f"{hash_val}.pt.br"
         logger.debug(f"Loading from file {file_path} with hash value: {hash_val}")
 
         if not file_path.exists():
             logger.debug("File does not exist")
             return None
 
-        with open(file_path, "rb") as f:
-            compressed_data = f.read()
+        load_kwargs = {
+            "map_location": self.current_hashes.device,
+            "weights_only": True,
+        }
 
-        buffer = io.BytesIO(brotli.decompress(compressed_data))
-        embedding = torch.load(buffer, map_location=self.current_hashes.device)
+        if self.zstd_compression:
+            try:
+                with open(file_path, "rb") as f:
+                    raw_data = zstd.decompress(f.read())
+
+            except Exception as e:
+                logger.error(
+                    f"Could not read or decompress file {file_path}, "
+                    f"skipping loading from file. Error: {e}\n"
+                    "Removing the file to avoid future errors."
+                )
+                file_path.unlink(missing_ok=True)
+                return None
+
+            buffer = io.BytesIO(raw_data)
+            embedding = torch.load(buffer, **load_kwargs)
+
+        else:
+            embedding = torch.load(str(file_path), **load_kwargs)
 
         logger.debug("Caching to memory before returning")
         self._cache_to_memory(embedding, hash_val)
