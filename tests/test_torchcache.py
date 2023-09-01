@@ -46,6 +46,28 @@ def test_basic_caching():
     output_cached = model(input_tensor)
     assert torch.equal(output, output_cached)
 
+    # Third time is the charm, but let's use a bigger batch size
+    input_tensor = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
+    output_cached = model(input_tensor)
+    assert torch.equal(output, output_cached[:2])
+
+    # Argument checks
+    with pytest.raises(ValueError):
+
+        @torchcache(persistent=True, zstd_compression=True, use_mmap_on_load=True)
+        class CachedModule(SimpleModule):
+            pass
+
+        CachedModule()
+
+    with pytest.raises(ValueError):
+
+        @torchcache(persistent=False, zstd_compression=True)
+        class CachedModule(SimpleModule):
+            pass
+
+        CachedModule()
+
 
 # Test caching mechanism with persistent storage.
 def test_persistent_caching(tmp_path):
@@ -119,6 +141,85 @@ def test_hashing():
     hashes = cache.hash_tensor(input_tensor)
 
     assert hashes.shape[0] == input_tensor.shape[0]
+
+
+def test_compression(tmp_path):
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path, zstd_compression=True)
+    class CachedModule(SimpleModule):
+        pass
+
+    model = CachedModule()
+    input_tensor = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.float32)
+
+    # First pass, caching should occur and save to file
+    output = model(input_tensor)
+    assert torch.equal(output, input_tensor * 2)
+
+    # Check if cache files were created
+    assert len(list((tmp_path / model.cache_instance.module_hash).iterdir())) == 2
+
+    # Second pass, should retrieve from cache from memory
+    output_cached = model(input_tensor)
+    assert torch.equal(output, output_cached)
+
+    # Now create a new instance of the model and check if the cache is loaded from disk
+    # We re-define the class to flush the cache in memory
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path, zstd_compression=True)
+    class CachedModule(SimpleModule):
+        pass
+
+    model2 = CachedModule()
+    original_load_from_file = model2.cache_instance._load_from_file
+    model2.cache_instance.original_load_from_file = original_load_from_file
+    load_from_file_called = False
+
+    def _load_from_file(*args, **kwargs):
+        nonlocal load_from_file_called
+        load_from_file_called = True
+        original_load_from_file(*args, **kwargs)
+
+    model2.cache_instance._load_from_file = _load_from_file
+    output_cached = model2(input_tensor)
+    assert torch.equal(output, output_cached)
+    assert load_from_file_called
+
+
+# Test cache size limits
+def test_cache_size(tmp_path):
+    # Overhead of saving a tensor in disk is around 700 bytes
+    @torchcache(
+        persistent=True,
+        persistent_cache_dir=tmp_path,
+        max_persistent_cache_size=1500,
+        max_memory_cache_size=20,
+    )
+    class CachedModule(SimpleModule):
+        pass
+
+    model = CachedModule()
+    input_tensor1 = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.float32)
+    input_tensor2 = torch.tensor([[7, 8, 9], [10, 11, 12]], dtype=torch.float32)
+
+    # First pass, caching should occur and save to file
+    output = model(input_tensor1)
+    assert torch.equal(output, input_tensor1 * 2)
+
+    # Check if cache files were created
+    assert len(list((tmp_path / model.cache_instance.module_hash).iterdir())) == 2
+
+    # Check that the persistent flag is not set, but the memory flag is
+    assert not model.cache_instance.is_persistent_cache_full
+    assert model.cache_instance.is_memory_cache_full
+
+    # Now pass a tensor that is bigger than the cache size
+    output = model(input_tensor2)
+    assert torch.equal(output, input_tensor2 * 2)
+
+    # Check if cache files were not created
+    assert len(list((tmp_path / model.cache_instance.module_hash).iterdir())) == 2
+
+    # Check that the flag is set
+    assert model.cache_instance.is_persistent_cache_full
 
 
 # Test for mixed cache hits

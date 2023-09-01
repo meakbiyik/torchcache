@@ -152,6 +152,14 @@ class _TorchCache:
             improve the performance for large files, but it cannot be used together
             with compression.
         """
+        if not persistent and zstd_compression:
+            raise ValueError("Cannot use zstd compression without persistent cache")
+
+        if zstd_compression and use_mmap_on_load:
+            raise ValueError(
+                "Cannot use zstd compression and mmap on load at the same time"
+            )
+
         # Rolling powers of the hash base, up until 2**15 to fit in float16
         roll_powers = torch.arange(0, subsample_count * 2) % 15
         self.subsample_count = subsample_count
@@ -170,11 +178,6 @@ class _TorchCache:
         self.memory_cache_size = 0
         self.is_memory_cache_full = False
         self.cache_dtype = cache_dtype
-
-        if self.zstd_compression and self.use_mmap_on_load:
-            raise ValueError(
-                "Cannot use zstd compression and mmap on load at the same time"
-            )
 
         # We allow explicit overloading of mmap option despite version
         # check so that people can use it with nightly versions
@@ -598,7 +601,15 @@ class _TorchCache:
         else:
             if self.use_mmap_on_load:
                 load_kwargs["mmap"] = True
-            embedding = torch.load(str(file_path), **load_kwargs)
+            try:
+                embedding = torch.load(str(file_path), **load_kwargs)
+            except Exception as e:
+                logger.error(
+                    f"Could not read file {file_path}, skipping loading from file. "
+                    f"Error: {e}\nRemoving the file to avoid future errors."
+                )
+                file_path.unlink(missing_ok=True)
+                return None
 
         logger.debug("Caching to memory before returning")
         self._cache_to_memory(embedding, hash_val)
