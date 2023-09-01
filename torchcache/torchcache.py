@@ -93,6 +93,7 @@ class _TorchCache:
         subsample_count: int = 10000,
         persistent: bool = False,
         persistent_cache_dir: str = None,
+        create_persistent_cache_subdir: bool = True,
         max_persistent_cache_size: int = int(10e9),
         max_memory_cache_size: int = int(1e9),
         zstd_compression: bool = False,
@@ -100,20 +101,29 @@ class _TorchCache:
         zstd_compression_threads: int = 1,
         cache_dtype: torch.dtype = None,
         use_mmap_on_load: bool = False,
-    ) -> None:
+    ):
         """Initialize the torchcache.
 
         Parameters
         ----------
         subsample_count : int
-            Number of values to subsample from the tensor.
+            Number of values to subsample from the tensor in hash computation,
+            by default 10000. This is used to improve hashing performance,
+            at the cost of a higher probability of hash collisions. Current
+            default is 10000, which should be enough for most use cases.
         memory_cache_device : str or torch.device, optional
-            Device to use for the cache, by default "cpu"
+            Device to use for the cache, by default "cpu". If None, then the
+            original device of the tensor is used.
         persistent : bool, optional
             Whether to use a file-system-based cache, by default False
         persistent_cache_dir : str or Path, optional
             Directory to use for caching, by default None. If None, then a temporary
             directory is used. Only used if persistent is True.
+        create_persistent_cache_subdir : bool, optional
+            Whether to create a new subdirectory in the persistent cache dir
+            for the calculated module hash, by default True. Set this to False
+            if you have already cached the embeddings for a module, and you want
+            to avoid creating a new subdirectory by accident.
         max_persistent_cache_size : int, optional
             Maximum size of the persistent cache in bytes, by default 10e9 (10 GB)
         max_memory_cache_size : int, optional
@@ -175,15 +185,16 @@ class _TorchCache:
 
         if self.persistent:
             logger.debug("Initializing persistent cache")
-            self.cache_dir = (
+            self.cache_parent_dir = (
                 Path(persistent_cache_dir) if persistent_cache_dir is not None else None
             )
-            logger.info(f"Torchcache dir: {self.cache_dir}")
+            logger.info(f"Torchcache parent dir: {self.cache_parent_dir}")
+            self.create_persistent_cache_subdir = create_persistent_cache_subdir
             self.max_persistent_cache_size = max_persistent_cache_size
             self.persistent_cache_size = 0
             self.is_persistent_cache_full = False
-            if self.cache_dir is None:
-                self.cache_dir = Path(tempfile.mkdtemp())
+            if self.cache_parent_dir is None:
+                self.cache_parent_dir = Path(tempfile.mkdtemp())
                 atexit.register(self.cache_cleanup)
 
         logger.debug(f"Params: {self.__dict__}")
@@ -199,9 +210,9 @@ class _TorchCache:
         self.module_hash: int = 0
 
     def cache_cleanup(self):
-        logger.info(f"Cleaning up the persistent cache in {self.cache_dir}")
-        shutil.rmtree(self.cache_dir, ignore_errors=True)
-        logger.info(f"Deleted cache dir: {self.cache_dir}")
+        logger.info(f"Cleaning up the persistent cache in {self.cache_parent_dir}")
+        shutil.rmtree(self.cache_parent_dir, ignore_errors=True)
+        logger.info(f"Deleted cache dir: {self.cache_parent_dir}")
 
     def forward_pre_hook(self, module, inputs):
         """Forward pre-hook to check the cache.
@@ -323,15 +334,27 @@ class _TorchCache:
             # If the module source cannot be retrieved, we use the module name
             hash_string = module.__class__.__name__ + repr(args) + repr(kwargs)
         logger.debug(f"Module hash string: {hash_string}")
-        # We convert it to an integer so that it is easier to manipulate
-        self.module_hash = int.from_bytes(
-            hashlib.blake2b(
-                hash_string.encode(),
-                digest_size=6,
-            ).digest(),
-            "big",
-        )
+        self.module_hash = hashlib.blake2b(
+            hash_string.encode(),
+            digest_size=32,
+        ).hexdigest()
         logger.info(f"Module hash: {self.module_hash}")
+        # If we are using a persistent cache, create a subdirectory for the module
+        if self.persistent:
+            # Let's check first if the cache subdirectory exists
+            self.cache_dir = self.cache_parent_dir / str(self.module_hash)
+            if not self.cache_dir.exists():
+                if not self.create_persistent_cache_subdir:
+                    raise ValueError(
+                        "Persistent cache subdirectory does not exist, "
+                        "and create_persistent_cache_subdir is False. "
+                        "The module hash has probably change since the "
+                        "last time you cached this module. If you want to "
+                        "cache the embeddings for the new module, set "
+                        "create_persistent_cache_subdir to True (default)."
+                    )
+                logger.debug(f"New cache dir: {self.cache_dir}")
+                self.cache_dir.mkdir(parents=True)
 
         # Wrap the forward method so that we can skip it if needed
         current_original_forward = module.forward
@@ -461,13 +484,10 @@ class _TorchCache:
 
         # in mixed precision, the matmul operation returns float16 values,
         # which overflows
-        hash_val = (
-            torch.sum(
-                tensor * self.coefficients[:, : tensor.shape[1]],
-                dim=1,
-                dtype=torch.long,
-            )
-            + self.module_hash
+        hash_val = torch.sum(
+            tensor * self.coefficients[:, : tensor.shape[1]],
+            dim=1,
+            dtype=torch.long,
         )
 
         return hash_val
@@ -484,7 +504,9 @@ class _TorchCache:
 
         embedding_size = embedding.element_size() * embedding.nelement()
         if self.memory_cache_size + embedding_size < self.max_memory_cache_size:
-            self.cache[hash_val] = embedding.to(self.memory_cache_device)
+            if self.memory_cache_device is not None:
+                embedding = embedding.to(self.memory_cache_device)
+            self.cache[hash_val] = embedding
             self.memory_cache_size += embedding_size
             logger.debug(f"New memory cache size: {self.memory_cache_size}")
         else:

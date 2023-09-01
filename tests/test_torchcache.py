@@ -61,7 +61,7 @@ def test_persistent_caching(tmp_path):
     assert torch.equal(output, input_tensor * 2)
 
     # Check if cache files were created
-    assert len(list(tmp_path.iterdir())) == 2
+    assert len(list((tmp_path / model.cache_instance.module_hash).iterdir())) == 2
 
     # Second pass, should retrieve from cache from memory
     output_cached = model(input_tensor)
