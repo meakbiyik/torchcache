@@ -93,7 +93,7 @@ class _TorchCache:
         subsample_count: int = 10000,
         persistent: bool = False,
         persistent_cache_dir: str = None,
-        create_persistent_cache_subdir: bool = True,
+        persistent_module_hash: str = None,
         max_persistent_cache_size: int = int(10e9),
         max_memory_cache_size: int = int(1e9),
         zstd_compression: bool = False,
@@ -119,11 +119,14 @@ class _TorchCache:
         persistent_cache_dir : str or Path, optional
             Directory to use for caching, by default None. If None, then a temporary
             directory is used. Only used if persistent is True.
-        create_persistent_cache_subdir : bool, optional
-            Whether to create a new subdirectory in the persistent cache dir
-            for the calculated module hash, by default True. Set this to False
-            if you have already cached the embeddings for a module, and you want
-            to avoid creating a new subdirectory by accident.
+        persistent_module_hash : str, optional
+            Hash of the module definition, args, and kwargs, by default None. If None,
+            then the module hash is automatically determined. You can explicitly
+            set this if you want to use the same cache for slightly different
+            modules. You can find the module hash in the following locations:
+            - In the logs, if you set the logging level to INFO or DEBUG
+            - In the cached module's self.cache_instance.module_hash attribute
+            - As the name of the subdirectory in the persistent cache
         max_persistent_cache_size : int, optional
             Maximum size of the persistent cache in bytes, by default 10e9 (10 GB)
         max_memory_cache_size : int, optional
@@ -189,7 +192,6 @@ class _TorchCache:
                 Path(persistent_cache_dir) if persistent_cache_dir is not None else None
             )
             logger.info(f"Torchcache parent dir: {self.cache_parent_dir}")
-            self.create_persistent_cache_subdir = create_persistent_cache_subdir
             self.max_persistent_cache_size = max_persistent_cache_size
             self.persistent_cache_size = 0
             self.is_persistent_cache_full = False
@@ -206,8 +208,15 @@ class _TorchCache:
         self.current_indices_to_embed = None
         self.current_skip_forward = False
 
-        # Overridden in wrap_module
-        self.module_hash: int = 0
+        # Overridden in wrap_module if None
+        self.module_hash: str = persistent_module_hash
+        if persistent_module_hash is not None:
+            logger.warn(
+                f"Overriding module hash: {self.module_hash}. "
+                "This might cause you quite a bit of headache if you are not "
+                "careful, since any changes to the module definition, args, "
+                "or kwargs will not be reflected in the cache."
+            )
 
     def cache_cleanup(self):
         logger.info(f"Cleaning up the persistent cache in {self.cache_parent_dir}")
@@ -341,21 +350,8 @@ class _TorchCache:
         logger.info(f"Module hash: {self.module_hash}")
         # If we are using a persistent cache, create a subdirectory for the module
         if self.persistent:
-            # Let's check first if the cache subdirectory exists
             self.cache_dir = self.cache_parent_dir / str(self.module_hash)
-            if not self.cache_dir.exists():
-                if not self.create_persistent_cache_subdir:
-                    raise ValueError(
-                        "Persistent cache subdirectory does not exist, "
-                        "and create_persistent_cache_subdir is False. "
-                        "The module hash has probably change since the "
-                        "last time you cached this module. If you want to "
-                        "cache the embeddings for the new module, set "
-                        "create_persistent_cache_subdir to True (default)."
-                    )
-                logger.debug(f"New cache dir: {self.cache_dir}")
-                self.cache_dir.mkdir(parents=True)
-
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
         # Wrap the forward method so that we can skip it if needed
         current_original_forward = module.forward
 

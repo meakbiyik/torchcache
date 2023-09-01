@@ -101,3 +101,27 @@ More specifically, if you change the compression quality, the cache will be inva
 The invalidation does not remove the old cached items, it just skips them. They can also be, although highly unlikely, overwritten by a new cache with the same key. If you revert the changes, the cache will be valid again.
 
 Note that updating `torchcache` might, in some cases, invalidate the cache. I will try to avoid this as much as possible, but cannot guarantee full backward compatibility, particularly in the early stages of the project.
+
+Avoiding cache invalidation
+---------------------------
+
+If you created a cache with a certain configuration, and you want to avoid accidental cache invalidation and subsequently re-caching, you can set the module hash directly via the ``persistent_module_hash`` argument.
+
+.. code-block:: python
+
+   from torchcache import torchcache
+
+    @torchcache(
+        persistent=True,
+        persistent_module_hash="my_module_hash",
+    )
+    class MyModule(nn.Module):
+        ...
+
+This will make sure that the cache is not invalidated if you change the module's code, initialization arguments, or keyword arguments. Be careful though, as this will also prevent the cache from being invalidated if you change the `torchcache` parameters, or if you change the module's code in a way that matters. In this case, you will have to delete the cache manually. I recommend using this option only if you are sure that the cache will not be invalidated, otherwise you might end up with a stale cache and a nasty headache.
+
+You can find the current module hash in the following locations:
+
+- In the logs, if you set the logging level to INFO or DEBUG
+- In the cached module's self.cache_instance.module_hash attribute
+- As the name of the subdirectory in the persistent cache
