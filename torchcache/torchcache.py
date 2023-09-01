@@ -548,8 +548,8 @@ class _TorchCache:
         if self.zstd_compression:
             raw_data = zstd.compress(
                 raw_data,
-                level=self.zstd_compression_level,
-                threads=self.zstd_compression_threads,
+                self.zstd_compression_level,
+                self.zstd_compression_threads,
             )
             logger.debug(f"Compressed data size: {len(raw_data)}")
 
