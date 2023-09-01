@@ -343,6 +343,8 @@ class _TorchCache:
                 logger.error(f"Could not retrieve the module source: {e}")
                 # If the module source cannot be retrieved, we use the module name
                 hash_string = module.__class__.__name__ + repr(args) + repr(kwargs)
+            # Also add the crucial parameters of torchcache
+            hash_string += repr(self.subsample_count) + repr(self.zstd_compression)
             logger.debug(f"Module hash string: {hash_string}")
             self.module_hash = hashlib.blake2b(
                 hash_string.encode(),
