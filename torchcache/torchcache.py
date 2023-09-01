@@ -332,21 +332,22 @@ class _TorchCache:
         logger.debug("Wrapping the module and registering hooks")
         module.register_forward_pre_hook(self.forward_pre_hook)
         module.register_forward_hook(self.forward_hook)
-        # Also create a hash of the module definition, args, and kwargs
-        # So that we do not mistakenly use the cache for a different module
-        logger.debug("Creating module hash")
-        try:
-            module_definition = inspect.getsource(moduleClass)
-            hash_string = module_definition + repr(args) + repr(kwargs)
-        except OSError as e:
-            logger.error(f"Could not retrieve the module source: {e}")
-            # If the module source cannot be retrieved, we use the module name
-            hash_string = module.__class__.__name__ + repr(args) + repr(kwargs)
-        logger.debug(f"Module hash string: {hash_string}")
-        self.module_hash = hashlib.blake2b(
-            hash_string.encode(),
-            digest_size=32,
-        ).hexdigest()
+        if self.module_hash is None:
+            # Create a hash of the module definition, args, and kwargs
+            # So that we do not mistakenly use the cache for a different module
+            logger.debug("Creating module hash")
+            try:
+                module_definition = inspect.getsource(moduleClass)
+                hash_string = module_definition + repr(args) + repr(kwargs)
+            except OSError as e:
+                logger.error(f"Could not retrieve the module source: {e}")
+                # If the module source cannot be retrieved, we use the module name
+                hash_string = module.__class__.__name__ + repr(args) + repr(kwargs)
+            logger.debug(f"Module hash string: {hash_string}")
+            self.module_hash = hashlib.blake2b(
+                hash_string.encode(),
+                digest_size=32,
+            ).hexdigest()
         logger.info(f"Module hash: {self.module_hash}")
         # If we are using a persistent cache, create a subdirectory for the module
         if self.persistent:
