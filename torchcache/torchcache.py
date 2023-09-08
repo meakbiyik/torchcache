@@ -578,7 +578,7 @@ class _TorchCache:
 
         load_kwargs = {
             "map_location": self.current_hashes.device,
-            "weights_only": True,
+            "weights_only": False,  # True causes a huge performance hit
         }
 
         if self.zstd_compression:
