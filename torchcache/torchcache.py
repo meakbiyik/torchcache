@@ -412,9 +412,16 @@ class _TorchCache:
                 if (
                     embeddings is None
                     or embeddings.shape[0] < self.current_hashes.shape[0]
+                    or embedding.shape != embeddings[i].shape
                 ):
                     if embeddings is None:
                         logger.info("Embeddings is None, initializing")
+                    elif embedding.shape != embeddings[i].shape:
+                        logger.warn(
+                            f"Embedding shape mismatch: {embedding.shape} vs "
+                            f"{embeddings[i].shape}. Resizing to "
+                            f"{self.current_hashes.shape[0]}"
+                        )
                     else:
                         logger.info(
                             f"Embeddings is too small ({embeddings.shape[0]}), "
