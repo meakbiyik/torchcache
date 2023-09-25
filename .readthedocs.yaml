@@ -21,8 +21,8 @@ build:
       # Install dependencies with 'docs' dependency group
       # https://python-poetry.org/docs/managing-dependencies/#dependency-groups
       - poetry install
-    post_build:
-      - poetry run sphinx-build -b html docs/source docs/build
+      # Switch to CPU-only PyTorch
+      - pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
