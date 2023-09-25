@@ -136,7 +136,20 @@ def test_persistent_caching_temporary_cachedir():
 
 # Test hashing functionality.
 def test_hashing():
-    cache = _TorchCache()
+    cache = _TorchCache(
+        memory_cache_device="cpu",
+        subsample_count=10000,
+        persistent=False,
+        persistent_cache_dir=None,
+        persistent_module_hash=None,
+        max_persistent_cache_size=int(10e9),
+        max_memory_cache_size=int(1e9),
+        zstd_compression=False,
+        zstd_compression_level=3,
+        zstd_compression_threads=1,
+        cache_dtype=None,
+        use_mmap_on_load=False,
+    )
     input_tensor = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.float32)
     hashes = cache.hash_tensor(input_tensor)
 
@@ -381,6 +394,37 @@ def test_different_dtype():
     assert torch.equal(output, input_tensor * 2)
 
     # Second pass, should retrieve from cache but result should be the same
+    output = model(input_tensor)
+
+    assert torch.equal(output, input_tensor * 2)
+
+
+def test_persistent_module_hash(tmp_path):
+    @torchcache(
+        persistent=True, persistent_module_hash="test", persistent_cache_dir=tmp_path
+    )
+    class CachedModule(SimpleModule):
+        pass
+
+    model = CachedModule()
+    input_tensor = torch.tensor([[1, 2, 3]], dtype=torch.float32)
+
+    output = model(input_tensor)
+
+    assert torch.equal(output, input_tensor * 2)
+
+    # Create another Module with the same persistent_module_hash but different forward pass
+    @torchcache(
+        persistent=True, persistent_module_hash="test", persistent_cache_dir=tmp_path
+    )
+    class CachedModule2(SimpleModule):
+        def forward(self, x):
+            return x * 3
+
+    model2 = CachedModule2()
+
+    # Second pass, should retrieve from cache but result should be the same
+    # as the first module since the persistent_module_hash is the same
     output = model(input_tensor)
 
     assert torch.equal(output, input_tensor * 2)
