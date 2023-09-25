@@ -4,6 +4,8 @@
 
 Effortlessly cache PyTorch module outputs on-the-fly with `torchcache`.
 
+Particularly useful for caching and serving the outputs of computationally expensive large, pre-trained PyTorch modules, such as vision transformers. Note that gradients will not flow through the cached outputs.
+
 - [Features](#features)
 - [Installation](#installation)
 - [Basic usage](#basic-usage)
