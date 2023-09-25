@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath(".." + os.sep + ".."))
 project = "torchcache"
 copyright = "2023, Eren Akbiyik"
 author = "Eren Akbiyik"
-release = "v0.3.2"
+release = "v0.4.0"
 
 html_title = "torchcache"
 
