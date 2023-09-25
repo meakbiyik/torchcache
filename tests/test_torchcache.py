@@ -51,15 +51,6 @@ def test_basic_caching():
     output_cached = model(input_tensor)
     assert torch.equal(output, output_cached[:2])
 
-    # Argument checks
-    with pytest.raises(ValueError):
-
-        @torchcache(persistent=True, zstd_compression=True, use_mmap_on_load=True)
-        class CachedModule(SimpleModule):
-            pass
-
-        CachedModule()
-
     with pytest.raises(ValueError):
 
         @torchcache(persistent=False, zstd_compression=True)
@@ -425,6 +416,28 @@ def test_persistent_module_hash(tmp_path):
 
     # Second pass, should retrieve from cache but result should be the same
     # as the first module since the persistent_module_hash is the same
+    output = model(input_tensor)
+
+    assert torch.equal(output, input_tensor * 2)
+
+
+def test_mmap_on_load(tmp_path):
+    @torchcache(
+        persistent=True,
+        persistent_cache_dir=tmp_path,
+        use_mmap_on_load=True,
+    )
+    class CachedModule(SimpleModule):
+        pass
+
+    model = CachedModule()
+    input_tensor = torch.tensor([[1, 2, 3]], dtype=torch.float32)
+
+    output = model(input_tensor)
+
+    assert torch.equal(output, input_tensor * 2)
+
+    # Second pass, should retrieve from cache but result should be the same
     output = model(input_tensor)
 
     assert torch.equal(output, input_tensor * 2)

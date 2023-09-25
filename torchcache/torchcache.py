@@ -4,6 +4,7 @@ import hashlib
 import inspect
 import io
 import logging
+import mmap
 import shutil
 import tempfile
 from pathlib import Path
@@ -98,11 +99,8 @@ def torchcache(
         data type of the first tensor that is processed is used.
     use_mmap_on_load : bool, optional
         Whether to use mmap when loading the cached embeddings from file, by
-        default False. If None, then it is automatically determined based on
-        the torch version. This is only used if persistent is True. This option
-        might be useful if you are using a version >= 2.0.1, as it should
-        improve the performance for large files, but it cannot be used together
-        with compression.
+        default False. This option might be useful if each embedding is very
+        large, as it might improve the performance for large files.
     """
     # Multiple initialization of the same class shares the same cache
     cache_instance = None
@@ -178,11 +176,6 @@ class _TorchCache:
         if not persistent and zstd_compression:
             raise ValueError("Cannot use zstd compression without persistent cache")
 
-        if zstd_compression and use_mmap_on_load:
-            raise ValueError(
-                "Cannot use zstd compression and mmap on load at the same time"
-            )
-
         # Rolling powers of the hash base, up until 2**15 to fit in float16
         roll_powers = torch.arange(0, subsample_count * 2) % 15
         self.subsample_count = subsample_count
@@ -201,16 +194,7 @@ class _TorchCache:
         self.memory_cache_size = 0
         self.is_memory_cache_full = False
         self.cache_dtype = cache_dtype
-
-        # We allow explicit overloading of mmap option despite version
-        # check so that people can use it with nightly versions
-        torch_version = torch.__version__.split(".")
-        self.use_mmap_on_load = (
-            int(torch_version[0]) == 2
-            and (torch_version[1] > 0 or torch_version[2] >= 1)
-            if use_mmap_on_load is None
-            else use_mmap_on_load
-        )
+        self.use_mmap_on_load = use_mmap_on_load
 
         if self.persistent:
             logger.debug("Initializing persistent cache")
@@ -611,35 +595,38 @@ class _TorchCache:
             "weights_only": False,  # True causes a huge performance hit
         }
 
+        try:
+            with open(file_path, "rb") as f:
+                f = (
+                    mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                    if self.use_mmap_on_load
+                    else f
+                )
+                raw_data = f.read()
+
+        except Exception as e:
+            logger.error(
+                f"Could not read file {file_path}, "
+                f"skipping loading from file. Error: {e}\n"
+                "Removing the file to avoid future errors."
+            )
+            file_path.unlink(missing_ok=True)
+            return None
+
         if self.zstd_compression:
             try:
-                with open(file_path, "rb") as f:
-                    raw_data = zstd.decompress(f.read())
-
+                raw_data = zstd.decompress(raw_data)
             except Exception as e:
                 logger.error(
-                    f"Could not read or decompress file {file_path}, "
+                    f"Could not decompress file {file_path}, "
                     f"skipping loading from file. Error: {e}\n"
                     "Removing the file to avoid future errors."
                 )
                 file_path.unlink(missing_ok=True)
                 return None
 
-            buffer = io.BytesIO(raw_data)
-            embedding = torch.load(buffer, **load_kwargs)
-
-        else:
-            if self.use_mmap_on_load:
-                load_kwargs["mmap"] = True
-            try:
-                embedding = torch.load(str(file_path), **load_kwargs)
-            except Exception as e:
-                logger.error(
-                    f"Could not read file {file_path}, skipping loading from file. "
-                    f"Error: {e}\nRemoving the file to avoid future errors."
-                )
-                file_path.unlink(missing_ok=True)
-                return None
+        buffer = io.BytesIO(raw_data)
+        embedding = torch.load(buffer, **load_kwargs)
 
         logger.debug("Caching to memory before returning")
         self._cache_to_memory(embedding, hash_val)
