@@ -40,6 +40,13 @@ class MyModule(nn.Module):
     def forward(self, x):
         # This output will be cached
         return self.linear(x)
+
+    input_tensor = torch.ones(10, dtype=torch.float32)
+    # Output is cached during the first call...
+    output = model(input_tensor)
+    # ...and is retrieved from the cache for the next one
+    output_cached = model(input_tensor)
+
 ```
 
 See documentation at [torchcache.readthedocs.io](https://torchcache.readthedocs.io/en/latest/) for more examples.
@@ -49,8 +56,8 @@ See documentation at [torchcache.readthedocs.io](https://torchcache.readthedocs.
 To ensure seamless operation, `torchcache` assumes the following:
 
 - Your module is a subclass of `nn.Module`.
-- The module's forward method accepts any number of positional arguments with shapes `(B, \*)`, where `B` is the batch size and `\*` represents any number of dimensions. All tensors should be on the same device and have the same dtype.
-- The forward method returns a single tensor of shape `(B, \*)`.
+- The module's forward method accepts any number of positional arguments with shapes `(B, *)`, where `B` is the batch size and `*` represents any number of dimensions. All tensors should be on the same device and have the same dtype.
+- The forward method returns a single tensor of shape `(B, *)`.
 
 ## Contribution
 

@@ -96,8 +96,6 @@ The cache is invalidated when:
 - The module initialization arguments/keywork arguments change
 - The torchcache parameters change
 
-More specifically, if you change the compression quality, the cache will be invalidated. If you change the cache dtype, the cache will be invalidated. If you change the module's code, the cache will be invalidated. If you change the module's initialization arguments, the cache will be invalidated. If you change the module's keyword arguments, the cache will be invalidated.
-
 The invalidation does not remove the old cached items, it just skips them. They can also be, although highly unlikely, overwritten by a new cache with the same key. If you revert the changes, the cache will be valid again.
 
 Note that updating `torchcache` might, in some cases, invalidate the cache. I will try to avoid this as much as possible, but cannot guarantee full backward compatibility, particularly in the early stages of the project.
