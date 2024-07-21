@@ -21,7 +21,7 @@ black = "^23.7.0"
 isort = "^5.12.0"
 sphinx = "7.1.2"
 numpydoc = "^1.5.0"
-furo = "^2023.8.19"
+furo = "^2024.7.18"
 
 [tool.black]
 target-version = ["py310"]
