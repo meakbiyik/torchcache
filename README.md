@@ -41,11 +41,11 @@ class MyModule(nn.Module):
         # This output will be cached
         return self.linear(x)
 
-    input_tensor = torch.ones(10, dtype=torch.float32)
-    # Output is cached during the first call...
-    output = model(input_tensor)
-    # ...and is retrieved from the cache for the next one
-    output_cached = model(input_tensor)
+input_tensor = torch.ones(10, dtype=torch.float32)
+# Output is cached during the first call...
+output = model(input_tensor)
+# ...and is retrieved from the cache for the next one
+output_cached = model(input_tensor)
 
 ```
 
