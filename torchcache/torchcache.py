@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 def torchcache(
     *,
+    enabled: bool = True,
     memory_cache_device: str = "cpu",
     subsample_count: int = 10000,
     persistent: bool = False,
@@ -60,6 +61,8 @@ def torchcache(
 
     Parameters
     ----------
+    enabled : bool
+        The decorator is enabled, by default True.
     subsample_count : int
         Number of values to subsample from the tensor in hash computation,
         by default 10000. This is used to improve hashing performance,
@@ -125,6 +128,17 @@ def torchcache(
         class WrappedModule(ModuleClass):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
+
+                enabled_attr = f"{magic_prefix}enabled"
+                if not enabled or (
+                    hasattr(self, enabled_attr) and not getattr(self, enabled_attr)
+                ):
+                    logger.info(
+                        "torchcache is disabled. It will not cache any input tensors, "
+                        "nor return any value from a pre-existing cache."
+                    )
+                    return
+
                 logger.debug("Initializing torchcache")
                 nonlocal cache_instance
                 if cache_instance is None:
@@ -132,16 +146,20 @@ def torchcache(
                     # Override the cache keyword arguments using the class properties
                     # that starts with torchcache_
                     for key in dir(self):
-                        if key.startswith(magic_prefix):
+                        stripped_key = key[len(magic_prefix) :]
+                        if stripped_key in cache_kwargs:
                             logger.info(
-                                f"Overriding {key[len(magic_prefix) :]} with "
+                                f"Overriding {stripped_key} with "
                                 f"{getattr(self, key)}"
                             )
-                            cache_kwargs[key[len(magic_prefix) :]] = getattr(self, key)
+                            cache_kwargs[stripped_key] = getattr(self, key)
+
                     logger.debug(f"Torchcache kwargs: {cache_kwargs}")
                     cache_instance = _TorchCache(**cache_kwargs)
+
                 self.cache_instance = cache_instance
                 self.cache_instance.wrap_module(self, ModuleClass, *args, **kwargs)
+
                 __name__ = f"{ModuleClass.__name__}Cached"  # noqa: F841
                 __qualname__ = f"{ModuleClass.__qualname__}Cached"  # noqa: F841
                 logger.debug("Initialized torchcache")

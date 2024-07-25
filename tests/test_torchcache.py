@@ -1,4 +1,5 @@
 """Tests for the caching module."""
+
 import os
 
 import pytest
@@ -441,6 +442,32 @@ def test_mmap_on_load(tmp_path):
     output = model(input_tensor)
 
     assert torch.equal(output, input_tensor * 2)
+
+
+# Ensure that if one creates two instances of a module and
+# only desires caching for one, they can disable caching via
+# magic attribute torchcache_enabled
+def test_duplicate_modules():
+    @torchcache(persistent=False)
+    class MyModule(SimpleModule):
+        def __init__(self, cache=True):
+            super().__init__()
+            self.torchcache_enabled = cache
+
+    cached_module = MyModule()
+    noncached_module = MyModule(cache=False)
+
+    input_tensor = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.float32)
+    # Assert that the cache is empty
+    assert len(cached_module.cache_instance.cache) == 0
+    # First pass, caching should occur
+    output = cached_module(input_tensor)
+    assert torch.equal(output, input_tensor * 2)
+    # Assert that the cache is not empty
+    assert len(cached_module.cache_instance.cache) == input_tensor.shape[0]
+
+    # Assert that the other module has no cache
+    assert not hasattr(noncached_module, "cache_instance")
 
 
 @pytest.fixture(autouse=True)

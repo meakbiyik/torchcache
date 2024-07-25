@@ -87,6 +87,28 @@ You can also set the parameters directly inside the decorated module, in case th
 
 Note that the parameters set in the module take precedence over the parameters set in the decorator.
 
+Selectively enabling `torchcache` for module instances
+------------------------------------------------------
+
+Using the magic prefix described above and the `enabled` argument, you can selectively enable or disable `torchcache` for different instances of the same class.
+
+.. code-block:: python
+
+   from torchcache import torchcache
+
+    @torchcache()
+    class MyModule(nn.Module):
+        def __init__(self, caching_enabled):
+            super().__init__()
+            self.linear = nn.Linear(10, 10)
+            self.torchcache_enabled = caching_enabled
+
+        def forward(self, x):
+            return self.linear(x)
+
+    module_with_caching = MyModule(caching_enabled=True)
+    module_without_caching = MyModule(caching_enabled=False)
+
 When is cache invalidated?
 --------------------------
 
