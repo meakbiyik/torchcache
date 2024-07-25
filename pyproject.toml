@@ -23,6 +23,10 @@ sphinx = "7.1.2"
 numpydoc = "^1.5.0"
 furo = "^2024.7.18"
 
+[tool.poetry_bumpversion.file."docs/source/conf.py"]
+search = 'release = "v{current_version}"'
+replace = 'release = "v{new_version}"'
+
 [tool.black]
 target-version = ["py310"]
 include = '\.pyi?$'

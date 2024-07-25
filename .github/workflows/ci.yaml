@@ -112,5 +112,11 @@ jobs:
       env:
         PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
       run: |
+        new_version=$(echo ${{ github.ref_name }} | perl -ne 'print $1 if /(\d+\.\d+\.\d+)/')
+        if [[ -z $new_version ]]; then
+          echo "Tag $GITHUB_REF does not match \d+.\d+.\d+"
+          exit 1
+        fi
         poetry config pypi-token.pypi $PYPI_TOKEN
+        poetry version $new_version
         poetry publish --build
