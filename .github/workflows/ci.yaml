@@ -108,6 +108,9 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
         installer-parallel: true
+        plugins: |
+          poetry-bumpversion
+
     - name: Publish package
       env:
         PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
@@ -118,5 +121,6 @@ jobs:
           exit 1
         fi
         poetry config pypi-token.pypi $PYPI_TOKEN
+        poetry self add poetry-bumpversion
         poetry version $new_version
         poetry publish --build
