@@ -121,6 +121,5 @@ jobs:
           exit 1
         fi
         poetry config pypi-token.pypi $PYPI_TOKEN
-        poetry self add poetry-bumpversion
         poetry version $new_version
         poetry publish --build
