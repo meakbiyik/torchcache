@@ -14,9 +14,11 @@ from typing import Type, Union
 import torch
 import zstd
 from torch import Tensor
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["torchcache"]
 
 def torchcache(
     *,
@@ -34,11 +36,11 @@ def torchcache(
     cache_dtype: torch.dtype = None,
     use_mmap_on_load: bool = False,
 ) -> callable:
-    r"""Decorate a nn.Module class to cache the output of the forward pass.
+    r"""Polymorphic cache decorator for nn.Module subclasses or pure Tensor functions.
 
-    Call this decorator on a nn.Module class to cache the output of the forward
-    pass, given the same input and the same module definition.
-
+    As a class decorator: caches Module.forward outputs.
+    As a function decorator: wraps the function in an nn.Module and caches its outputs.
+    
     Always invoke the decorator with parentheses, even if no arguments are
     passed. For example:
 
@@ -124,7 +126,7 @@ def torchcache(
     }
     magic_prefix = "torchcache_"
 
-    def decorator(ModuleClass):
+    def _decorate_module(ModuleClass):
         class WrappedModule(ModuleClass):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -165,6 +167,31 @@ def torchcache(
                 logger.debug("Initialized torchcache")
 
         return WrappedModule
+
+    def decorator(target):
+        # nn.Module subclass case
+        if inspect.isclass(target) and issubclass(target, torch.nn.Module):
+            return _decorate_module(target)
+        # pure function case
+        elif callable(target):
+            logger.debug(f"torchcache: decorating function {target.__name__}")
+            fn = target
+            class _FnModule(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                def forward(self, *args, **kwargs):
+                    return fn(*args, **kwargs)
+
+            CachedMod = _decorate_module(_FnModule)
+            cache_mod = CachedMod()
+
+            @wraps(fn)
+            def wrapped(*args, **kwargs):
+                return cache_mod(*args, **kwargs)
+
+            return wrapped
+        else:
+            raise TypeError("torchcache can only decorate nn.Module subclasses or pure functions.")
 
     return decorator
 

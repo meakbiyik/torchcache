@@ -191,11 +191,11 @@ def test_compression(tmp_path):
 
 # Test cache size limits
 def test_cache_size(tmp_path):
-    # Overhead of saving a tensor in disk is around 700 bytes
+    # Overhead of saving a tensor in disk is around 1200 bytes
     @torchcache(
         persistent=True,
         persistent_cache_dir=tmp_path,
-        max_persistent_cache_size=1500,
+        max_persistent_cache_size=2500,
         max_memory_cache_size=20,
     )
     class CachedModule(SimpleModule):
@@ -468,6 +468,50 @@ def test_duplicate_modules():
 
     # Assert that the other module has no cache
     assert not hasattr(noncached_module, "cache_instance")
+
+
+# Test pure function decorator basic behavior
+def test_pure_function_basic():
+    calls = []
+
+    @torchcache(persistent=False)
+    def mul_fn(x):
+        calls.append(x.clone())
+        return x * 3
+
+    input_tensor = torch.tensor([[1], [2]], dtype=torch.float32)
+    out1 = mul_fn(input_tensor)
+    assert torch.equal(out1, input_tensor * 3)
+    # second call same input, should not re-execute function
+    out2 = mul_fn(input_tensor)
+    assert torch.equal(out2, input_tensor * 3)
+    assert len(calls) == 1
+
+
+# Test pure function with persistence and disk files
+def test_pure_function_persistent(tmp_path):
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path)
+    def add_fn(x):
+        return x + 5
+
+    input_tensor = torch.tensor([[3], [4]], dtype=torch.float32)
+    out = add_fn(input_tensor)
+    assert torch.equal(out, input_tensor + 5)
+
+    # extract module instance from closure
+    cache_mod = next(
+        cell.cell_contents
+        for cell in add_fn.__closure__
+        if isinstance(cell.cell_contents, torch.nn.Module)
+    )
+    cache_dir = cache_mod.cache_instance.cache_dir
+    assert cache_dir.exists()
+    # should have one file per batch element
+    assert len(list(cache_dir.iterdir())) == input_tensor.shape[0]
+
+    # second call should use cache
+    out2 = add_fn(input_tensor)
+    assert torch.equal(out2, out)
 
 
 @pytest.fixture(autouse=True)
