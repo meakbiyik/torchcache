@@ -562,6 +562,31 @@ def test_pure_function_kwargs_affect_cache():
     out2 = add_fn(input_tensor, 6)
 
 
+def test_ensure_unique_function_cache(tmp_path):
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path)
+    def add_fn(x):
+        return x + 1
+    
+    @torchcache(persistent=True, persistent_cache_dir=tmp_path)
+    def add_fn2(x):
+        return x + 2
+
+    input_tensor = torch.tensor([[1], [2]], dtype=torch.float32)
+    out1 = add_fn(input_tensor)
+    assert torch.equal(out1, input_tensor + 1)
+    # second call same input, should not re-execute function
+    out2 = add_fn(input_tensor)
+    assert torch.equal(out2, input_tensor + 1)
+    assert len(list((tmp_path / add_fn.cache_instance.module_hash).iterdir())) == 2
+
+    # check that the two functions have different module hashes
+    assert add_fn.cache_instance.module_hash != add_fn2.cache_instance.module_hash
+
+    # check that the second function does not use the first function's cache
+    out3 = add_fn2(input_tensor)
+    assert torch.equal(out3, input_tensor + 2)
+    assert len(list((tmp_path / add_fn2.cache_instance.module_hash).iterdir())) == 2
+
 @pytest.fixture(autouse=True)
 def cleanup():
     yield

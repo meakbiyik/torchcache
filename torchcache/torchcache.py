@@ -178,19 +178,31 @@ def torchcache(
             logger.debug(f"torchcache: decorating function {target.__name__}")
             fn = target
 
+            # We enrich the module arguments to ensure a unique module hash based on the function
+            signature = inspect.signature(fn)
+            name = fn.__name__
+            parameters = f"{name}({', '.join([f'{k}={v}' for k, v in signature.parameters.items()])})"
+            logger.debug(f"Function name and parameters: {name}({parameters})")
+            try:
+                source = inspect.getsource(fn)
+            except OSError:
+                logger.error(f"Could not retrieve the function source: {fn}")
+                source = None
+
             class _FnModule(torch.nn.Module):
-                def __init__(self):
+                def __init__(self, name, parameters, source):
                     super().__init__()
 
                 def forward(self, *args, **kwargs):
                     return fn(*args, **kwargs)
 
             CachedMod = _decorate_module(_FnModule)
-            cache_mod = CachedMod()
+            cache_mod = CachedMod(name, parameters, source)
 
             @wraps(fn)
             def wrapped(*args, **kwargs):
                 return cache_mod(*args, **kwargs)
+            wrapped.cache_instance = cache_mod.cache_instance
 
             return wrapped
         else:

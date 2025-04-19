@@ -2,7 +2,7 @@
 
 [![Lint and Test](https://github.com/meakbiyik/torchcache/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/meakbiyik/torchcache/actions/workflows/ci.yaml) [![Codecov](https://codecov.io/gh/meakbiyik/torchcache/graph/badge.svg?token=Oh6mNp0pc8)](https://codecov.io/gh/meakbiyik/torchcache) [![Documentation Status](https://readthedocs.org/projects/torchcache/badge/?version=latest)](https://torchcache.readthedocs.io/en/latest/?badge=latest)
 
-Effortlessly cache PyTorch module outputs on-the-fly with `torchcache`.
+Effortlessly cache PyTorch module outputs or PyTorch-heavy functions on-the-fly with `torchcache`.
 
 Particularly useful for caching and serving the outputs of computationally expensive large, pre-trained PyTorch modules, such as vision transformers. Note that gradients will not flow through the cached outputs.
 
@@ -49,6 +49,16 @@ output_cached = model(input_tensor)
 
 ```
 
+You can also cache the output of any function, not just PyTorch modules:
+
+```python
+from torchcache import torchcache
+@torchcache()
+def my_function(x):
+    # This output will be cached
+    return x * 2
+```
+
 See documentation at [torchcache.readthedocs.io](https://torchcache.readthedocs.io/en/latest/) for more examples.
 
 ## Assumptions
@@ -56,7 +66,7 @@ See documentation at [torchcache.readthedocs.io](https://torchcache.readthedocs.
 To ensure seamless operation, `torchcache` assumes the following:
 
 - Your module is a subclass of `nn.Module`.
-- The module's forward method accepts any number of positional arguments with shapes `(B, *)`, where `B` is the batch size and `*` represents any number of dimensions. All tensors should be on the same device and have the same dtype.
+- The module's forward method accepts any number of positional or keyword arguments with shapes `(B, *)`, where `B` is the batch size and `*` represents any number of dimensions, or any other basic immutable Python types (int, str, float, boolean). All tensors should be on the same device and have the same dtype.
 - The forward method returns a single tensor of shape `(B, *)`.
 
 ## Contribution

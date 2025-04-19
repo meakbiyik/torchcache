@@ -17,6 +17,26 @@ Cache the output of your PyTorch module effortlessly with a single decorator:
             # This output will be cached
             return self.linear(x)
 
+Alternatively, cache the output of a torch-heavy function:
+
+.. code-block:: python
+
+   from torchcache import torchcache
+
+    @torchcache()
+    def my_function(x):
+        # This output will be cached
+        return x + 1
+
+Limitations
+-----------
+
+`torchcache` is designed to cache the tensor-based batched inputs and outputs efficiently in a batch-agnostic way. However, it has some limitations:
+
+- The module's forward method should return a single tensor.
+- All input tensors should be on the same device and have the same dtype, with the same batch dimension.
+- Only basic immutable Python types (int, str, float, boolean) are supported as input arguments in addition to tensors.
+
 Persistent caching
 ------------------
 
