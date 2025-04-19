@@ -191,11 +191,11 @@ def test_compression(tmp_path):
 
 # Test cache size limits
 def test_cache_size(tmp_path):
-    # Overhead of saving a tensor in disk is around 1200 bytes
+    # Overhead of saving a tensor in disk is around 1100 bytes
     @torchcache(
         persistent=True,
         persistent_cache_dir=tmp_path,
-        max_persistent_cache_size=2500,
+        max_persistent_cache_size=2400,
         max_memory_cache_size=20,
     )
     class CachedModule(SimpleModule):
