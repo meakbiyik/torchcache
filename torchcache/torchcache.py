@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["torchcache"]
 
+
 def torchcache(
     *,
     enabled: bool = True,
@@ -40,7 +41,7 @@ def torchcache(
 
     As a class decorator: caches Module.forward outputs.
     As a function decorator: wraps the function in an nn.Module and caches its outputs.
-    
+
     Always invoke the decorator with parentheses, even if no arguments are
     passed. For example:
 
@@ -176,9 +177,11 @@ def torchcache(
         elif callable(target):
             logger.debug(f"torchcache: decorating function {target.__name__}")
             fn = target
+
             class _FnModule(torch.nn.Module):
                 def __init__(self):
                     super().__init__()
+
                 def forward(self, *args, **kwargs):
                     return fn(*args, **kwargs)
 
@@ -191,7 +194,9 @@ def torchcache(
 
             return wrapped
         else:
-            raise TypeError("torchcache can only decorate nn.Module subclasses or pure functions.")
+            raise TypeError(
+                "torchcache can only decorate nn.Module subclasses or pure functions."
+            )
 
     return decorator
 
@@ -279,7 +284,7 @@ class _TorchCache:
         shutil.rmtree(self.cache_parent_dir, ignore_errors=True)
         logger.info(f"Deleted cache dir: {self.cache_parent_dir}")
 
-    def forward_pre_hook(self, module, inputs):
+    def forward_pre_hook(self, module, args, kwargs):
         """Forward pre-hook to check the cache.
 
         Takes in arbitrary number of tensors with shape (B, *), hashes
@@ -294,9 +299,14 @@ class _TorchCache:
         ----------
         module : nn.Module
             Module to hook.
-        inputs : Tuple[Tensor]
-            Inputs to the module.
+        args : tuple
+            Positional arguments to the module.
+        kwargs : dict
+            Keyword arguments to the module.
         """
+        inputs, extra_args_hash, arg_idxs, kwarg_keys = self._gather_inputs(
+            args, kwargs
+        )
         logger.debug(
             f"Forward pre-hook input shapes: {[input.shape for input in inputs]}"
         )
@@ -307,6 +317,10 @@ class _TorchCache:
 
         self.current_hashes = self.hash_tensor(concatenated_inputs)
 
+        if extra_args_hash is not None:
+            extra_hash_tensor = torch.full_like(self.current_hashes, extra_args_hash)
+            self.current_hashes = self.current_hashes ^ extra_hash_tensor
+
         (
             self.current_indices_to_embed,
             self.current_embeddings,
@@ -314,11 +328,20 @@ class _TorchCache:
 
         if self.current_indices_to_embed.shape[0] > 0:
             logger.debug("Forwarding the rest of the inputs")
-            inputs_to_embed = [
-                input[self.current_indices_to_embed].view(-1, *input.shape[1:])
-                for input in inputs
-            ]
-            return tuple(inputs_to_embed)
+            # rebuild args/kwargs with only the tensors to embed
+            new_args = list(args)
+            new_kwargs = dict(kwargs)
+            # slice positional tensors
+            for idx, tensor in zip(arg_idxs, inputs[: len(arg_idxs)]):
+                new_args[idx] = tensor[self.current_indices_to_embed].view(
+                    -1, *tensor.shape[1:]
+                )
+            # slice keyword tensors
+            for key, tensor in zip(kwarg_keys, inputs[len(arg_idxs) :]):
+                new_kwargs[key] = tensor[self.current_indices_to_embed].view(
+                    -1, *tensor.shape[1:]
+                )
+            return tuple(new_args), new_kwargs
         else:
             logger.debug("Skipping forward pass")
             self.current_skip_forward = True
@@ -386,7 +409,7 @@ class _TorchCache:
             )
 
         logger.debug("Wrapping the module and registering hooks")
-        module.register_forward_pre_hook(self.forward_pre_hook)
+        module.register_forward_pre_hook(self.forward_pre_hook, with_kwargs=True)
         module.register_forward_hook(self.forward_hook)
         if self.module_hash is None:
             logger.debug("Creating module hash")
@@ -413,6 +436,64 @@ class _TorchCache:
         module.forward = forward_wrapper
 
         return module
+
+    def _gather_inputs(
+        self,
+        args: tuple,
+        kwargs: dict,
+    ) -> tuple[Tensor, int]:
+        """Gather the inputs to the module.
+
+        This method collects all the tensor inputs to the module,
+        and returns them as a list. It also computes a hash value
+        for the extra args, which are the non-tensor arguments to
+        the module.
+
+        Parameters
+        ----------
+        args : tuple
+            Positional arguments to the module.
+        kwargs : dict
+            Keyword arguments to the module.
+
+        Returns
+        -------
+        tuple[Tensor, int]
+            List of tensors and a hash value for the extra args.
+        """
+        # collect all tensor args & record their positions/keys
+        tensor_args = [(i, a) for i, a in enumerate(args) if isinstance(a, Tensor)]
+        tensor_kwargs = [(k, v) for k, v in kwargs.items() if isinstance(v, Tensor)]
+        inputs = [v for _, v in tensor_args] + [v for _, v in tensor_kwargs]
+        batch_dim = inputs[0].shape[0]
+        for input in inputs:
+            if input.shape[0] != batch_dim:
+                raise ValueError(
+                    "All inputs must have the same batch dimension. "
+                    f"Got {input.shape[0]} and {batch_dim}"
+                )
+
+        extra_args = tuple(a for a in args if not isinstance(a, Tensor)) + tuple(
+            v for v in kwargs.values() if not isinstance(v, Tensor)
+        )
+        for arg in extra_args:
+            if not isinstance(arg, (int, float, str, bool)):
+                raise ValueError(
+                    "All non-Tensor extra args to the call must be an immutable type, one of "
+                    " int, float, str, or bool. "
+                    f"Got {type(arg)}"
+                )
+        extra_args_hash = None
+        if extra_args:
+            extra_args_hash = 0
+            for a in extra_args:
+                # We need digest size 7 to fit the output in torch.long
+                extra_args_hash ^= int(
+                    hashlib.blake2b(repr(a).encode(), digest_size=7).hexdigest(), 16
+                )
+        arg_idxs = [i for i, _ in tensor_args]
+        kwarg_keys = [k for k, _ in tensor_kwargs]
+        return inputs, extra_args_hash, arg_idxs, kwarg_keys
 
     def _generate_module_hash(
         self,

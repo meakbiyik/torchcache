@@ -95,7 +95,7 @@ def test_persistent_caching(tmp_path):
     def _load_from_file(*args, **kwargs):
         nonlocal load_from_file_called
         load_from_file_called = True
-        original_load_from_file(*args, **kwargs)
+        return original_load_from_file(*args, **kwargs)
 
     model2.cache_instance._load_from_file = _load_from_file
     output_cached = model2(input_tensor)
@@ -181,7 +181,7 @@ def test_compression(tmp_path):
     def _load_from_file(*args, **kwargs):
         nonlocal load_from_file_called
         load_from_file_called = True
-        original_load_from_file(*args, **kwargs)
+        return original_load_from_file(*args, **kwargs)
 
     model2.cache_instance._load_from_file = _load_from_file
     output_cached = model2(input_tensor)
@@ -263,13 +263,11 @@ def test_monkey_patching():
     assert torch.equal(output, input_tensor * 2)
 
 
-# Module with multiple input tensors
-class DoubleInputModule(nn.Module):
-    def forward(self, x, y):
-        return x * 2 + y * 3
-
-
 def test_multiple_inputs():
+    class DoubleInputModule(nn.Module):
+        def forward(self, x, y):
+            return x * 2 + y * 3
+
     @torchcache(persistent=False)
     class CachedModule(DoubleInputModule):
         pass
@@ -512,6 +510,56 @@ def test_pure_function_persistent(tmp_path):
     # second call should use cache
     out2 = add_fn(input_tensor)
     assert torch.equal(out2, out)
+
+def test_non_tensor_args_kwargs_affect_cache():
+    @torchcache(persistent=False)
+    class CachedScaleModule(SimpleModule):
+        def forward(self, x, scale):
+            return x * scale
+
+    model = CachedScaleModule()
+    input_tensor = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)
+
+    # initial cache empty
+    assert len(model.cache_instance.cache) == 0
+
+    # call with positional non-tensor arg
+    out1 = model(input_tensor, 2)
+    assert torch.equal(out1, input_tensor * 2)
+    assert len(model.cache_instance.cache) == input_tensor.shape[0]
+
+    # call with different pos arg, should add new entries
+    out2 = model(input_tensor, 3)
+    assert torch.equal(out2, input_tensor * 3)
+    assert len(model.cache_instance.cache) == 2 * input_tensor.shape[0]
+
+    # repeat first call, cache size should not change
+    out3 = model(input_tensor, 2)
+    assert torch.equal(out3, input_tensor * 2)
+    assert len(model.cache_instance.cache) == 2 * input_tensor.shape[0]
+
+    # call with kwarg instead of positional
+    out4 = model(input_tensor, scale=3)
+    assert torch.equal(out4, input_tensor * 3)
+    assert len(model.cache_instance.cache) == 2 * input_tensor.shape[0]
+
+
+def test_pure_function_kwargs_affect_cache():
+    calls = []
+
+    @torchcache(persistent=False)
+    def add_fn(x, offset):
+        calls.append(offset)
+        return x + offset
+
+    input_tensor = torch.tensor([[1], [2]], dtype=torch.float32)
+
+    # first call with offset=5
+    out1 = add_fn(input_tensor, 5)
+    assert torch.equal(out1, input_tensor + 5)
+
+    # call with different offset, should compute and cache new values
+    out2 = add_fn(input_tensor, 6)
 
 
 @pytest.fixture(autouse=True)
