@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        python-version: ["3.9", "3.10"]
         torch-version: ["^1.13.0", "2.0.0"]
         # v2.0.1 is currently buggy: https://github.com/pytorch/pytorch/issues/100974
         # torch-version: ["^1.13.0", "^2.0.1"]
