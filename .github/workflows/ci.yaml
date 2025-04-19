@@ -19,10 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
-        torch-version: ["^1.13.0", "2.0.0"]
-        # v2.0.1 is currently buggy: https://github.com/pytorch/pytorch/issues/100974
-        # torch-version: ["^1.13.0", "^2.0.1"]
+        python-version: ["3.9", "3.10", "3.11"]
+        torch-version: ["2.0.0", "2.6.0"]
     steps:
       # check-out repo and setup python
       - name: Check out repository
@@ -39,6 +37,7 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
+          version: 1.8.0
           virtualenvs-create: true
           virtualenvs-in-project: true
           installer-parallel: true
@@ -46,7 +45,7 @@ jobs:
       # load cached venv if cache exists
       - name: Load cached venv
         id: cached-poetry-dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ matrix.torch-version }}-${{ hashFiles('**/poetry.lock') }}

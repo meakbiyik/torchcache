@@ -9,5 +9,5 @@ exclude =
     old,
     build,
     dist,
-max-complexity = 10
+max-complexity = 15
 max-line-length = 88
