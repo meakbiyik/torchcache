@@ -511,6 +511,7 @@ def test_pure_function_persistent(tmp_path):
     out2 = add_fn(input_tensor)
     assert torch.equal(out2, out)
 
+
 def test_non_tensor_args_kwargs_affect_cache():
     @torchcache(persistent=False)
     class CachedScaleModule(SimpleModule):
@@ -566,7 +567,7 @@ def test_ensure_unique_function_cache(tmp_path):
     @torchcache(persistent=True, persistent_cache_dir=tmp_path)
     def add_fn(x):
         return x + 1
-    
+
     @torchcache(persistent=True, persistent_cache_dir=tmp_path)
     def add_fn2(x):
         return x + 2
@@ -586,6 +587,7 @@ def test_ensure_unique_function_cache(tmp_path):
     out3 = add_fn2(input_tensor)
     assert torch.equal(out3, input_tensor + 2)
     assert len(list((tmp_path / add_fn2.cache_instance.module_hash).iterdir())) == 2
+
 
 @pytest.fixture(autouse=True)
 def cleanup():

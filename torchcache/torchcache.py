@@ -8,13 +8,13 @@ import logging
 import mmap
 import shutil
 import tempfile
+from functools import wraps
 from pathlib import Path
 from typing import Type, Union
 
 import torch
 import zstd
 from torch import Tensor
-from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -178,10 +178,13 @@ def torchcache(
             logger.debug(f"torchcache: decorating function {target.__name__}")
             fn = target
 
-            # We enrich the module arguments to ensure a unique module hash based on the function
+            # We need to ensure a unique module hash based on the function
             signature = inspect.signature(fn)
             name = fn.__name__
-            parameters = f"{name}({', '.join([f'{k}={v}' for k, v in signature.parameters.items()])})"
+            parameters = (
+                f"{name}"
+                f"({', '.join([f'{k}={v}' for k, v in signature.parameters.items()])})"
+            )
             logger.debug(f"Function name and parameters: {name}({parameters})")
             try:
                 source = inspect.getsource(fn)
@@ -202,6 +205,7 @@ def torchcache(
             @wraps(fn)
             def wrapped(*args, **kwargs):
                 return cache_mod(*args, **kwargs)
+
             wrapped.cache_instance = cache_mod.cache_instance
 
             return wrapped
@@ -491,8 +495,8 @@ class _TorchCache:
         for arg in extra_args:
             if not isinstance(arg, (int, float, str, bool)):
                 raise ValueError(
-                    "All non-Tensor extra args to the call must be an immutable type, one of "
-                    " int, float, str, or bool. "
+                    "All non-Tensor extra args to the call must be an immutable type, "
+                    "one of int, float, str, or bool. "
                     f"Got {type(arg)}"
                 )
         extra_args_hash = None
