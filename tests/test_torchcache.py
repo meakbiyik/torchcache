@@ -599,6 +599,9 @@ def test_fail_on_bad_parameters():
 
     module(torch.tensor([[1, 2, 3]]), "hello", 1, 1.0, boolean_argument=True)
 
+    # quickly test keyword args
+    module(hi=torch.tensor([[1, 2, 3]]))
+
     with pytest.raises(
         ValueError, match=r"All inputs must have at least 2 dimensions.+"
     ):
@@ -614,6 +617,15 @@ def test_fail_on_bad_parameters():
         ValueError, match=r"All inputs must have the same batch dimension.+"
     ):
         module(torch.tensor([[1, 2, 3], [4, 5, 6]]), torch.tensor([[7, 8, 9]]))
+
+    with pytest.raises(
+        TypeError, match=r"torchcache can only decorate nn.Module subclasses.+"
+    ):
+
+        @torchcache()
+        class NonModuleClass:
+            def forward(self, x):
+                return x * 2
 
 
 @pytest.fixture(autouse=True)
