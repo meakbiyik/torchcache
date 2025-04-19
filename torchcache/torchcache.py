@@ -8,6 +8,7 @@ import logging
 import mmap
 import shutil
 import tempfile
+import types
 from functools import wraps
 from pathlib import Path
 from typing import Type, Union
@@ -174,7 +175,7 @@ def torchcache(
         if inspect.isclass(target) and issubclass(target, torch.nn.Module):
             return _decorate_module(target)
         # pure function case
-        elif callable(target):
+        elif isinstance(target, types.FunctionType):
             logger.debug(f"torchcache: decorating function {target.__name__}")
             fn = target
 
