@@ -589,6 +589,33 @@ def test_ensure_unique_function_cache(tmp_path):
     assert len(list((tmp_path / add_fn2.cache_instance.module_hash).iterdir())) == 2
 
 
+def test_fail_on_bad_parameters():
+    @torchcache()
+    class CachedModule(SimpleModule):
+        def forward(self, *args, **kwargs):
+            return torch.tensor([0])
+
+    module = CachedModule()
+
+    module(torch.tensor([[1, 2, 3]]), "hello", 1, 1.0, boolean_argument=True)
+
+    with pytest.raises(
+        ValueError, match=r"All inputs must have at least 2 dimensions.+"
+    ):
+        module(torch.tensor([1, 2, 3]))
+
+    with pytest.raises(ValueError, match=r"No tensor inputs found.+"):
+        module([1, 2, 3])
+
+    with pytest.raises(ValueError, match=r"All non-Tensor extra args to the call.+"):
+        module(torch.tensor([[1, 2, 3]]), [1, 2, 3])
+
+    with pytest.raises(
+        ValueError, match=r"All inputs must have the same batch dimension.+"
+    ):
+        module(torch.tensor([[1, 2, 3], [4, 5, 6]]), torch.tensor([[7, 8, 9]]))
+
+
 @pytest.fixture(autouse=True)
 def cleanup():
     yield

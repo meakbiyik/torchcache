@@ -481,8 +481,20 @@ class _TorchCache:
         tensor_args = [(i, a) for i, a in enumerate(args) if isinstance(a, Tensor)]
         tensor_kwargs = [(k, v) for k, v in kwargs.items() if isinstance(v, Tensor)]
         inputs = [v for _, v in tensor_args] + [v for _, v in tensor_kwargs]
-        batch_dim = inputs[0].shape[0]
+        if not inputs:
+            raise ValueError(
+                "No tensor inputs found. "
+                "Please make sure to pass at least one tensor input."
+            )
+
+        batch_dim = inputs[0].shape[0] if inputs[0].shape else 0
         for input in inputs:
+            if len(input.shape) < 2:
+                raise ValueError(
+                    "All inputs must have at least 2 dimensions, with the first "
+                    "dimension being the batch dimension. "
+                    f"Got {input.shape}"
+                )
             if input.shape[0] != batch_dim:
                 raise ValueError(
                     "All inputs must have the same batch dimension. "
