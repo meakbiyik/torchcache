@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.abspath(".." + os.sep + ".."))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "torchcache"
-copyright = "2023, Eren Akbiyik"
+copyright = "2025, Eren Akbiyik"
 author = "Eren Akbiyik"
-release = "v0.4.1"
+release = "v0.5.2"
 
 html_title = "torchcache"
 
