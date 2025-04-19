@@ -453,7 +453,7 @@ class _TorchCache:
         self,
         args: tuple,
         kwargs: dict,
-    ) -> tuple[Tensor, int]:
+    ) -> tuple[list[Tensor], int, list[int], list[str]]:
         """Gather the inputs to the module.
 
         This method collects all the tensor inputs to the module,
