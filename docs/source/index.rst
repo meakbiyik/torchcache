@@ -7,6 +7,20 @@ Welcome to torchcache!
 
 Note that gradients will not flow through the cached outputs.
 
+Citation
+--------
+
+If you use our work, please consider citing our paper:
+
+.. code-block:: bibtex
+
+   @inproceedings{akbiyik2023routeformer,
+       title={Leveraging Driver Field-of-View for Multimodal Ego-Trajectory Prediction},
+       author={M. Eren Akbiyik, Nedko Savov, Danda Pani Paudel, Nikola Popovic, Christian Vater, Otmar Hilliges, Luc Van Gool, Xi Wang},
+       booktitle={International Conference on Learning Representations},
+       year={2025}
+   }
+
 .. toctree::
    :maxdepth: 2
    :caption: Table of Contents:

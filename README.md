@@ -6,22 +6,37 @@ Effortlessly cache PyTorch module outputs or PyTorch-heavy functions on-the-fly 
 
 Particularly useful for caching and serving the outputs of computationally expensive large, pre-trained PyTorch modules, such as vision transformers. Note that gradients will not flow through the cached outputs.
 
-- [Features](#features)
-- [Installation](#installation)
-- [Basic usage](#basic-usage)
-- [Assumptions](#assumptions)
-- [Contribution](#contribution)
+- [torchcache](#torchcache)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Citation](#citation)
+  - [Basic usage](#basic-usage)
+  - [Assumptions](#assumptions)
+  - [Contribution](#contribution)
 
 ## Features
 
-- Cache PyTorch module outputs either in-memory or persistently to disk.
+- Cache PyTorch module outputs or pure Python functions either in-memory or persistently to disk.
 - Simple decorator-based interface for easy usage.
-- Uses an MRU (most-recently-used) cache to limit memory/disk usage
+- Uses an MRU (most-recently-used) cache, which evicts the most recently used items first to manage memory/disk usage in a training setting. Learn more about MRU caches [here](https://en.wikipedia.org/wiki/Cache_replacement_policies#Most_recently_used_(MRU)).
 
 ## Installation
 
 ```bash
 pip install torchcache
+```
+
+## Citation
+
+If you use our work, please consider citing our paper:
+
+```bibtex
+@inproceedings{akbiyik2023routeformer,
+    title={Leveraging Driver Field-of-View for Multimodal Ego-Trajectory Prediction},
+    author={M. Eren Akbiyik, Nedko Savov, Danda Pani Paudel, Nikola Popovic, Christian Vater, Otmar Hilliges, Luc Van Gool, Xi Wang},
+    booktitle={International Conference on Learning Representations},
+    year={2025}
+}
 ```
 
 ## Basic usage
