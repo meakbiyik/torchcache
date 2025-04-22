@@ -5,6 +5,7 @@ repos:
         name: Generate Sphinx docs
         entry: poetry run sphinx-build -b html docs/source docs/build
         language: system
+        exclude: poetry.lock
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
