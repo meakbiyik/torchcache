@@ -68,6 +68,7 @@ You can also cache the output of any function, not just PyTorch modules:
 
 ```python
 from torchcache import torchcache
+
 @torchcache()
 def my_function(x):
     # This output will be cached
